@@ -1,0 +1,22 @@
+[build]
+  command = "npm run build"
+  publish = "dist"
+
+[functions]
+  directory = "netlify/functions"
+  node_bundler = "esbuild"
+
+[[edge_functions]]
+  path = "/*"
+  function = "staging-auth"
+
+[[redirects]]
+  from = "/api/*"
+  to = "/.netlify/functions/:splat"
+  status = 200
+
+# SPA fallback — must come after API redirects
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200

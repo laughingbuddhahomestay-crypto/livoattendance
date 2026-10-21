@@ -1,0 +1,678 @@
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { api, ApiResponseError } from '../api/client';
+import { useAuth } from '../auth/AuthContext';
+import { useUnsavedChanges } from '../hooks/useUnsavedChanges';
+import {
+  type AttendanceStatus,
+  type Staff,
+  STATUS_LABELS,
+  ALL_STATUSES,
+  todayIST,
+  formatWorkingHours,
+} from '../types';
+import LoadingSpinner from '../components/LoadingSpinner';
+import ErrorBanner from '../components/ErrorBanner';
+import StatusBadge from '../components/StatusBadge';
+import ConfirmDialog from '../components/ConfirmDialog';
+
+interface AttendanceRecord {
+  id?: string;
+  staff_id: string;
+  attendance_date: string;
+  status: AttendanceStatus;
+  shift?: string | null;
+  check_in?: string | null;
+  check_out?: string | null;
+  notes?: string | null;
+  version?: number;
+}
+
+interface EditedEntry {
+  staff_id: string;
+  status?: AttendanceStatus | '';
+  shift?: string;
+  check_in?: string;
+  check_out?: string;
+  notes?: string;
+  version?: number;
+  reason?: string;
+}
+
+export default function AttendancePage() {
+  const { user } = useAuth();
+  const [date, setDate] = useState(todayIST());
+  const [staffList, setStaffList] = useState<Staff[]>([]);
+  const [originalRecords, setOriginalRecords] = useState<Map<string, AttendanceRecord>>(new Map());
+  const [editedEntries, setEditedEntries] = useState<Map<string, EditedEntry>>(new Map());
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [saveSuccess, setSaveSuccess] = useState(false);
+  const [partialSaveInfo, setPartialSaveInfo] = useState<{
+    saved: number;
+    conflicts: Array<{ staff_id: string; current_version: number; staff_name?: string }>;
+  } | null>(null);
+  const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [expandedNotes, setExpandedNotes] = useState<Set<string>>(new Set());
+  const [monthLocked, setMonthLocked] = useState(false);
+  const [reasonDialog, setReasonDialog] = useState<{
+    open: boolean;
+    staffIds: string[];
+    reasons: Map<string, string>;
+    currentIndex: number;
+  }>({ open: false, staffIds: [], reasons: new Map(), currentIndex: 0 });
+  const [confirmDiscard, setConfirmDiscard] = useState(false);
+
+  const hasChanges = editedEntries.size > 0;
+  useUnsavedChanges(hasChanges);
+
+  const fetchAttendance = useCallback(async () => {
+    setLoading(true);
+    setError('');
+    setSaveSuccess(false);
+    try {
+      const data = await api.getAttendance(date);
+      const records = (data as any).records || [];
+      const staff = (data as any).staff || [];
+      setStaffList(staff);
+      const recMap = new Map<string, AttendanceRecord>();
+      for (const r of records) {
+        recMap.set(r.staff_id, r);
+      }
+      setOriginalRecords(recMap);
+
+      // Check month lock
+      try {
+        const locksData = await api.getMonthLocks();
+        const [y, m] = date.split('-').map(Number);
+        const locks = (locksData as any).locks || [];
+        const isLocked = locks.some((l: any) => l.year === y && l.month === m);
+        setMonthLocked(isLocked);
+      } catch {
+        setMonthLocked(false);
+      }
+    } catch (err: any) {
+      setError(err.message || 'Failed to load attendance data');
+    } finally {
+      setLoading(false);
+    }
+  }, [date]);
+
+  useEffect(() => {
+    fetchAttendance();
+  }, [fetchAttendance]);
+
+  const sortedStaff = useMemo(() => {
+    return [...staffList].sort((a, b) => {
+      const deptCmp = (a.department || '').localeCompare(b.department || '');
+      if (deptCmp !== 0) return deptCmp;
+      const nameA = a.full_name || a.name || '';
+      const nameB = b.full_name || b.name || '';
+      return nameA.localeCompare(nameB);
+    });
+  }, [staffList]);
+
+  const filteredStaff = useMemo(() => {
+    return sortedStaff.filter(s => {
+      const staffName = s.full_name || s.name || '';
+      if (search) {
+        const q = search.toLowerCase();
+        if (!staffName.toLowerCase().includes(q) && !s.employee_id.toLowerCase().includes(q)) {
+          return false;
+        }
+      }
+      if (statusFilter !== 'all') {
+        const entry = editedEntries.get(s.id);
+        const original = originalRecords.get(s.id);
+        const currentStatus = entry?.status !== undefined ? entry.status : original?.status;
+        if (statusFilter === 'not_marked') {
+          if (currentStatus) return false;
+        } else {
+          if (currentStatus !== statusFilter) return false;
+        }
+      }
+      return true;
+    });
+  }, [sortedStaff, search, statusFilter, editedEntries, originalRecords]);
+
+  const isEditable = !monthLocked || user?.role === 'owner';
+
+  const getFieldValue = (staffId: string, field: keyof EditedEntry) => {
+    const edited = editedEntries.get(staffId);
+    if (edited && edited[field] !== undefined) {
+      return edited[field];
+    }
+    const original = originalRecords.get(staffId);
+    if (original && (original as any)[field] !== undefined) {
+      return (original as any)[field];
+    }
+    if (field === 'shift') {
+      const staff = staffList.find(s => s.id === staffId);
+      return staff?.default_shift || '';
+    }
+    return '';
+  };
+
+  const updateEntry = useCallback(
+    (staffId: string, field: keyof EditedEntry, value: any) => {
+      if (!isEditable) return;
+      setEditedEntries(prev => {
+        const next = new Map(prev);
+        const existing = next.get(staffId) || { staff_id: staffId };
+        const original = originalRecords.get(staffId);
+
+        if (existing.version === undefined && original?.version !== undefined) {
+          existing.version = original.version;
+        }
+
+        const updated = { ...existing, [field]: value };
+
+        // Check if identical to original
+        const origStatus = original?.status || '';
+        const origShift = original?.shift || '';
+        const origCheckIn = original?.check_in || '';
+        const origCheckOut = original?.check_out || '';
+        const origNotes = original?.notes || '';
+
+        const curStatus = updated.status !== undefined ? updated.status : origStatus;
+        const curShift = updated.shift !== undefined ? updated.shift : origShift;
+        const curCheckIn = updated.check_in !== undefined ? updated.check_in : origCheckIn;
+        const curCheckOut = updated.check_out !== undefined ? updated.check_out : origCheckOut;
+        const curNotes = updated.notes !== undefined ? updated.notes : origNotes;
+
+        if (
+          original &&
+          curStatus === origStatus &&
+          curShift === origShift &&
+          curCheckIn === origCheckIn &&
+          curCheckOut === origCheckOut &&
+          curNotes === origNotes
+        ) {
+          next.delete(staffId);
+        } else {
+          next.set(staffId, updated);
+        }
+        return next;
+      });
+    },
+    [isEditable, originalRecords]
+  );
+
+  const markAllPresent = useCallback(() => {
+    if (!isEditable) return;
+    setEditedEntries(prev => {
+      const next = new Map(prev);
+      for (const staff of staffList) {
+        const original = originalRecords.get(staff.id);
+        const edited = next.get(staff.id);
+        const currentStatus = edited?.status !== undefined ? edited.status : original?.status;
+
+        if (!currentStatus) {
+          const entry: EditedEntry = {
+            staff_id: staff.id,
+            status: 'present',
+            shift: edited?.shift || original?.shift || staff.default_shift || '',
+          };
+          if (original?.version !== undefined) entry.version = original.version;
+          next.set(staff.id, entry);
+        }
+      }
+      return next;
+    });
+  }, [staffList, originalRecords, isEditable]);
+
+  const discardChanges = useCallback(() => {
+    setEditedEntries(new Map());
+    setConfirmDiscard(false);
+    setPartialSaveInfo(null);
+  }, []);
+
+  const performSave = useCallback(async () => {
+    setSaving(true);
+    setError('');
+    setSaveSuccess(false);
+    setPartialSaveInfo(null);
+    try {
+      const entries = Array.from(editedEntries.values()).map(entry => {
+        const payload: any = {
+          staff_id: entry.staff_id,
+          status: entry.status,
+        };
+        if (entry.shift) payload.shift = entry.shift;
+        if (entry.check_in) payload.check_in = entry.check_in;
+        if (entry.check_out) payload.check_out = entry.check_out;
+        if (entry.notes) payload.notes = entry.notes;
+        if (entry.version !== undefined) payload.version = entry.version;
+        if (entry.reason) payload.reason = entry.reason;
+        return payload;
+      });
+
+      const result: any = await api.saveAttendance({ date, entries });
+      const conflicts = result.conflicts || [];
+      const savedStaffIds = new Set<string>(result.saved_staff_ids || []);
+
+      if (conflicts.length > 0) {
+        // Partial save or full conflict: retain failed drafts in state, DO NOT show general success
+        setPartialSaveInfo({
+          saved: result.saved,
+          conflicts,
+        });
+
+        // Remove only successfully saved staff from editedEntries Map
+        setEditedEntries(prev => {
+          const next = new Map(prev);
+          for (const id of savedStaffIds) {
+            next.delete(id);
+          }
+          return next;
+        });
+
+        // Refetch latest records to refresh versions and background state
+        await fetchAttendance();
+      } else {
+        // Full success
+        setEditedEntries(new Map());
+        setSaveSuccess(true);
+        setTimeout(() => setSaveSuccess(false), 3500);
+        await fetchAttendance();
+      }
+    } catch (err: any) {
+      if (err instanceof ApiResponseError && err.isConflict) {
+        const body = (err as any).body || {};
+        setPartialSaveInfo({
+          saved: body.saved || 0,
+          conflicts: body.conflicts || [],
+        });
+        await fetchAttendance();
+      } else {
+        setError(err.message || 'Failed to save attendance records');
+      }
+    } finally {
+      setSaving(false);
+    }
+  }, [editedEntries, date, fetchAttendance]);
+
+  const handleSave = useCallback(async () => {
+    if (editedEntries.size === 0) return;
+
+    // Check for updates that need an audit reason
+    const updatesNeedingReason: string[] = [];
+    editedEntries.forEach((entry, staffId) => {
+      const original = originalRecords.get(staffId);
+      if (original && !entry.reason) {
+        updatesNeedingReason.push(staffId);
+      }
+    });
+
+    if (updatesNeedingReason.length > 0) {
+      setReasonDialog({
+        open: true,
+        staffIds: updatesNeedingReason,
+        reasons: new Map(),
+        currentIndex: 0,
+      });
+      return;
+    }
+
+    await performSave();
+  }, [editedEntries, originalRecords, performSave]);
+
+  const handleReasonSubmit = useCallback(() => {
+    const { staffIds, reasons } = reasonDialog;
+    setEditedEntries(prev => {
+      const next = new Map(prev);
+      for (const staffId of staffIds) {
+        const entry = next.get(staffId);
+        if (entry) {
+          next.set(staffId, {
+            ...entry,
+            reason: reasons.get(staffId) || 'Attendance correction',
+          });
+        }
+      }
+      return next;
+    });
+    setReasonDialog({ open: false, staffIds: [], reasons: new Map(), currentIndex: 0 });
+    setTimeout(() => {
+      performSave();
+    }, 0);
+  }, [reasonDialog, performSave]);
+
+  const toggleNotes = (staffId: string) => {
+    setExpandedNotes(prev => {
+      const next = new Set(prev);
+      if (next.has(staffId)) next.delete(staffId);
+      else next.add(staffId);
+      return next;
+    });
+  };
+
+  if (loading) return <LoadingSpinner message="Loading attendance records…" />;
+
+  return (
+    <div>
+      <div className="page-header">
+        <div>
+          <h1 className="page-title">Daily Attendance</h1>
+          <p className="page-subtitle">Mark and review attendance in Asia/Kolkata timezone</p>
+        </div>
+      </div>
+
+      {error && <ErrorBanner message={error} onRetry={fetchAttendance} />}
+
+      {monthLocked && (
+        <div className="lock-banner">
+          🔒 <strong>Month Locked:</strong> This month is locked against further edits.{' '}
+          {user?.role === 'owner'
+            ? 'Unlock it from Settings to make changes.'
+            : 'Contact the owner to unlock it.'}
+        </div>
+      )}
+
+      {/* Partial save warning banner (HTTP 207) */}
+      {partialSaveInfo && (
+        <div
+          style={{
+            background: '#FFF3E0',
+            border: '1px solid #EF6C00',
+            borderRadius: '8px',
+            padding: '1rem',
+            marginBottom: '1rem',
+          }}
+        >
+          <div style={{ color: '#E65100', fontWeight: 700, fontSize: '0.95rem', marginBottom: '0.25rem' }}>
+            ⚠️ Partial Save Notice (HTTP 207 Multi-Status)
+          </div>
+          <p style={{ margin: '0 0 0.5rem 0', fontSize: '0.85rem', color: '#5D4037' }}>
+            <strong>{partialSaveInfo.saved} record(s)</strong> were saved successfully. However,{' '}
+            <strong>{partialSaveInfo.conflicts.length} record(s)</strong> failed due to simultaneous edits by another user.
+            Your unsaved changes for the conflicting records have been retained below for your review.
+          </p>
+          <div style={{ fontSize: '0.8rem', color: '#4E342E' }}>
+            <strong>Conflicting Staff:</strong>{' '}
+            {partialSaveInfo.conflicts
+              .map(c => {
+                const s = staffList.find(st => st.id === c.staff_id);
+                return s?.full_name || s?.name || c.staff_name || c.staff_id;
+              })
+              .join(', ')}
+          </div>
+        </div>
+      )}
+
+      <div className="toolbar">
+        <input
+          type="date"
+          value={date}
+          max={todayIST()}
+          onChange={e => setDate(e.target.value)}
+          style={{ maxWidth: '180px' }}
+        />
+        <input
+          type="search"
+          placeholder="Search staff by name or ID…"
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          style={{ maxWidth: '240px' }}
+        />
+        <select
+          value={statusFilter}
+          onChange={e => setStatusFilter(e.target.value)}
+          style={{ maxWidth: '180px' }}
+        >
+          <option value="all">All Statuses</option>
+          {ALL_STATUSES.map(s => (
+            <option key={s} value={s}>
+              {STATUS_LABELS[s]}
+            </option>
+          ))}
+          <option value="not_marked">Not Marked</option>
+        </select>
+        {isEditable && (
+          <button className="btn btn-outline" onClick={markAllPresent}>
+            Mark All Present (Draft)
+          </button>
+        )}
+      </div>
+
+      {saveSuccess && (
+        <div className="alert alert-success">
+          ✓ All attendance records saved successfully to the database.
+        </div>
+      )}
+
+      {staffList.length === 0 ? (
+        <div className="card empty-state">
+          <div className="empty-state-icon">👥</div>
+          <p>No staff employed on {date}.</p>
+        </div>
+      ) : filteredStaff.length === 0 ? (
+        <div className="card empty-state">
+          <div className="empty-state-icon">🔍</div>
+          <p>No staff match the current filters.</p>
+        </div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', paddingBottom: hasChanges ? '5rem' : '1rem' }}>
+          {filteredStaff.map(staff => {
+            const isModified = editedEntries.has(staff.id);
+            const currentStatus = getFieldValue(staff.id, 'status') as AttendanceStatus | '';
+            const shift = (getFieldValue(staff.id, 'shift') as string) || '';
+            const checkIn = (getFieldValue(staff.id, 'check_in') as string) || '';
+            const checkOut = (getFieldValue(staff.id, 'check_out') as string) || '';
+            const notes = (getFieldValue(staff.id, 'notes') as string) || '';
+            const workHours = formatWorkingHours(checkIn, checkOut);
+            const notesExpanded = expandedNotes.has(staff.id);
+
+            return (
+              <div
+                key={staff.id}
+                className={`attendance-card ${isModified ? 'modified' : ''}`}
+              >
+                <div className="attendance-card-header">
+                  <div>
+                    <div className="attendance-staff-name">
+                      {staff.full_name || staff.name}
+                    </div>
+                    <div className="attendance-staff-meta">
+                      ID: {staff.employee_id} • {staff.department}
+                    </div>
+                  </div>
+                  {currentStatus ? (
+                    <StatusBadge status={currentStatus} />
+                  ) : (
+                    <span className="badge badge-inactive">Not Marked</span>
+                  )}
+                </div>
+
+                <div className="attendance-fields">
+                  <div className="attendance-field">
+                    <label>Status</label>
+                    <select
+                      value={currentStatus}
+                      onChange={e => updateEntry(staff.id, 'status', e.target.value)}
+                      disabled={!isEditable}
+                      className="status-select"
+                    >
+                      <option value="">Select status…</option>
+                      {ALL_STATUSES.map(s => (
+                        <option key={s} value={s}>
+                          {STATUS_LABELS[s]}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="attendance-field">
+                    <label>Shift</label>
+                    <input
+                      type="text"
+                      value={shift}
+                      onChange={e => updateEntry(staff.id, 'shift', e.target.value)}
+                      placeholder={staff.default_shift || 'e.g. Morning, Night'}
+                      disabled={!isEditable}
+                    />
+                  </div>
+
+                  <div className="attendance-field">
+                    <label>Check In</label>
+                    <input
+                      type="datetime-local"
+                      value={checkIn ? checkIn.slice(0, 16) : ''}
+                      onChange={e => updateEntry(staff.id, 'check_in', e.target.value)}
+                      disabled={!isEditable}
+                    />
+                  </div>
+
+                  <div className="attendance-field">
+                    <label>Check Out</label>
+                    <input
+                      type="datetime-local"
+                      value={checkOut ? checkOut.slice(0, 16) : ''}
+                      onChange={e => updateEntry(staff.id, 'check_out', e.target.value)}
+                      disabled={!isEditable}
+                    />
+                  </div>
+                </div>
+
+                {/* Working hours indicator: clearly distinguishes Recorded vs Incomplete vs Not Recorded */}
+                <div style={{ marginTop: '0.45rem', fontSize: '0.8rem' }}>
+                  {workHours.status === 'recorded' && (
+                    <span style={{ color: '#1B2A4A', fontWeight: 600 }}>
+                      ⏱ Recorded hours: <strong>{workHours.hours}h</strong> (overnight shift calculated)
+                    </span>
+                  )}
+                  {workHours.status === 'incomplete' && (
+                    <span style={{ color: '#d97706', fontWeight: 500 }}>
+                      ⚠️ Working hours: <em>Incomplete</em> (missing check-in or check-out)
+                    </span>
+                  )}
+                  {workHours.status === 'invalid' && (
+                    <span style={{ color: '#dc2626', fontWeight: 500 }}>
+                      ⚠️ Working hours: <em>Invalid duration</em> (check-out must be after check-in)
+                    </span>
+                  )}
+                  {workHours.status === 'not_recorded' && (
+                    <span style={{ color: '#94a3b8' }}>
+                      Working hours: <em>Not recorded</em>
+                    </span>
+                  )}
+                </div>
+
+                <div className="attendance-notes">
+                  <button
+                    className="btn btn-ghost btn-sm"
+                    onClick={() => toggleNotes(staff.id)}
+                    style={{ paddingLeft: 0 }}
+                  >
+                    {notesExpanded ? '▾ Hide Notes' : '▸ Add Notes / Remarks'}
+                  </button>
+                  {notesExpanded && (
+                    <textarea
+                      value={notes}
+                      onChange={e => updateEntry(staff.id, 'notes', e.target.value)}
+                      placeholder="Optional notes for this day's attendance..."
+                      disabled={!isEditable}
+                    />
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Unsaved changes bar */}
+      {hasChanges && (
+        <div className="unsaved-bar">
+          <span className="unsaved-text">
+            ⚠️ {editedEntries.size} unsaved change{editedEntries.size > 1 ? 's' : ''}
+          </span>
+          <div className="flex gap-1">
+            <button
+              className="btn btn-outline btn-sm"
+              onClick={() => setConfirmDiscard(true)}
+              disabled={saving}
+            >
+              Discard Changes
+            </button>
+            <button className="btn btn-primary btn-sm" onClick={handleSave} disabled={saving}>
+              {saving ? 'Saving…' : 'Save Attendance'}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Discard confirmation dialog */}
+      {confirmDiscard && (
+        <ConfirmDialog
+          title="Discard Unsaved Changes?"
+          message="Are you sure you want to discard all your unsaved modifications? This cannot be undone."
+          confirmLabel="Discard"
+          onConfirm={discardChanges}
+          onCancel={() => setConfirmDiscard(false)}
+        />
+      )}
+
+      {/* Audit Reason Dialog */}
+      {reasonDialog.open && (
+        <div className="modal-backdrop">
+          <div className="modal-card">
+            <h3>Reason for Attendance Correction</h3>
+            <p className="text-muted" style={{ fontSize: '0.85rem', marginBottom: '1rem' }}>
+              Please provide a brief reason for correcting the attendance of{' '}
+              <strong>
+                {(() => {
+                  const s = staffList.find(st => st.id === reasonDialog.staffIds[reasonDialog.currentIndex]);
+                  return s?.full_name || s?.name || 'this staff member';
+                })()}
+              </strong>
+              . This is recorded in the permanent audit trail.
+            </p>
+            <textarea
+              className="input"
+              rows={3}
+              placeholder="e.g., Manager correction, late reporting approved, shift swap..."
+              value={reasonDialog.reasons.get(reasonDialog.staffIds[reasonDialog.currentIndex]) || ''}
+              onChange={e => {
+                const val = e.target.value;
+                setReasonDialog(prev => {
+                  const nextReasons = new Map(prev.reasons);
+                  nextReasons.set(prev.staffIds[prev.currentIndex], val);
+                  return { ...prev, reasons: nextReasons };
+                });
+              }}
+              style={{ width: '100%', marginBottom: '1rem' }}
+              autoFocus
+            />
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem' }}>
+              <button
+                className="btn btn-secondary"
+                onClick={() => setReasonDialog({ open: false, staffIds: [], reasons: new Map(), currentIndex: 0 })}
+              >
+                Cancel
+              </button>
+              {reasonDialog.currentIndex < reasonDialog.staffIds.length - 1 ? (
+                <button
+                  className="btn btn-primary"
+                  onClick={() =>
+                    setReasonDialog(prev => ({
+                      ...prev,
+                      currentIndex: prev.currentIndex + 1,
+                    }))
+                  }
+                >
+                  Next ({reasonDialog.currentIndex + 1}/{reasonDialog.staffIds.length})
+                </button>
+              ) : (
+                <button className="btn btn-primary" onClick={handleReasonSubmit}>
+                  Confirm & Save
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
