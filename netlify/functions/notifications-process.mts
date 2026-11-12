@@ -39,19 +39,29 @@ export async function processOutboxJobs(db: any) {
     let failedCount = 0;
     let cancelledCount = 0;
 
+    // Performance Optimization: Batch pre-fetch staff details in 1 query (saves 20+ DB round-trips)
+    const staffIds = Array.from(new Set(items.map((i: any) => i.staff_id).filter(Boolean)));
+    const staffMap = new Map<string, any>();
+    if (staffIds.length > 0) {
+      const staffRes = await client.query(
+        `SELECT id, full_name, email, notify_absence, notify_monthly_report, is_active
+         FROM staff WHERE id = ANY($1)`,
+        [staffIds]
+      );
+      for (const s of staffRes.rows) {
+        staffMap.set(s.id, s);
+      }
+    }
+
     for (const item of items) {
       try {
         // 2. Recheck employee's current live email and notification preferences at dispatch time
         let recipientEmail = item.recipient_email;
 
         if (item.staff_id) {
-          const staffCheck = await client.query(
-            `SELECT id, full_name, email, notify_absence, notify_monthly_report, is_active
-             FROM staff WHERE id = $1`,
-            [item.staff_id]
-          );
+          const staff = staffMap.get(item.staff_id);
 
-          if (staffCheck.rows.length === 0) {
+          if (!staff) {
             // Staff was removed
             await client.query(
               `UPDATE notification_outbox
@@ -66,8 +76,6 @@ export async function processOutboxJobs(db: any) {
             cancelledCount++;
             continue;
           }
-
-          const staff = staffCheck.rows[0];
           if (!staff.is_active) {
             // Inactive staff
             await client.query(

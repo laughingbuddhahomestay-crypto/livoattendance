@@ -61,46 +61,53 @@ export default async (req?: Request) => {
           [monthEnd, monthStart]
         );
 
-        for (const s of eligibleStaff.rows) {
+        if (eligibleStaff.rows.length === 0) continue;
+
+        // Performance Optimization: Check existing outbox records in 1 query instead of N round-trips
+        const keysToCheck = eligibleStaff.rows.map((s: any) => `monthly_report:${s.id}:${reportYear}:${reportMonth}`);
+        const existingRes = await client.query(
+          'SELECT idempotency_key FROM notification_outbox WHERE idempotency_key = ANY($1)',
+          [keysToCheck]
+        );
+        const existingKeys = new Set(existingRes.rows.map((r: any) => r.idempotency_key));
+
+        const pendingStaff = eligibleStaff.rows.filter((s: any) => {
+          const key = `monthly_report:${s.id}:${reportYear}:${reportMonth}`;
+          return !existingKeys.has(key);
+        });
+
+        for (const s of pendingStaff) {
           const idempotencyKey = `monthly_report:${s.id}:${reportYear}:${reportMonth}`;
 
-          // Check if this employee already has an outbox entry for this month
-          const existing = await client.query(
-            'SELECT id FROM notification_outbox WHERE idempotency_key = $1',
-            [idempotencyKey]
+          // Generate full report data (including totals, provisional status, and attendance breakdown)
+          const reportData = await generateEmployeeMonthlyReportData(db, s.id, reportYear, reportMonth);
+
+          await client.query(
+            `INSERT INTO notification_outbox (
+               staff_id, recipient_email, notification_type,
+               idempotency_key, subject, body_html, body_text,
+               status, metadata
+             ) VALUES (
+               $1, $2, 'monthly_report', $3,
+               $4, $5, $6, 'queued', $7
+             )
+             ON CONFLICT (idempotency_key) DO NOTHING`,
+            [
+              s.id,
+              s.email,
+              idempotencyKey,
+              reportData.subject,
+              reportData.body_html,
+              reportData.body_text,
+              JSON.stringify({
+                year: reportYear,
+                month: reportMonth,
+                is_provisional: reportData.is_provisional,
+                automated_cron: true,
+              }),
+            ]
           );
-
-          if (existing.rows.length === 0) {
-            // Generate full report data (including totals, provisional status, and attendance breakdown)
-            const reportData = await generateEmployeeMonthlyReportData(db, s.id, reportYear, reportMonth);
-
-            await client.query(
-              `INSERT INTO notification_outbox (
-                 staff_id, recipient_email, notification_type,
-                 idempotency_key, subject, body_html, body_text,
-                 status, metadata
-               ) VALUES (
-                 $1, $2, 'monthly_report', $3,
-                 $4, $5, $6, 'queued', $7
-               )
-               ON CONFLICT (idempotency_key) DO NOTHING`,
-              [
-                s.id,
-                s.email,
-                idempotencyKey,
-                reportData.subject,
-                reportData.body_html,
-                reportData.body_text,
-                JSON.stringify({
-                  year: reportYear,
-                  month: reportMonth,
-                  is_provisional: reportData.is_provisional,
-                  automated_cron: true,
-                }),
-              ]
-            );
-            totalQueuedCount++;
-          }
+          totalQueuedCount++;
         }
       }
     } finally {
