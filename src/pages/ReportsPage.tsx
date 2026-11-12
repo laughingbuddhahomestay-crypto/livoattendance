@@ -408,7 +408,6 @@ export default function ReportsPage() {
                     <tr>
                       <th>Date</th>
                       <th>Status</th>
-                      <th>Shift</th>
                       <th>In / Out</th>
                       <th>Notes</th>
                     </tr>
@@ -429,7 +428,6 @@ export default function ReportsPage() {
                             {STATUS_LABELS[rec.status as AttendanceStatus] || rec.status}
                           </span>
                         </td>
-                        <td>{rec.shift || '—'}</td>
                         <td style={{ fontSize: '0.75rem', whiteSpace: 'nowrap' }}>
                           {rec.check_in
                             ? new Date(rec.check_in).toLocaleTimeString('en-IN', {

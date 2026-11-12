@@ -115,7 +115,9 @@ export default async (req: Request, context: Context) => {
           }
         } else {
           // Employed, past date, but not marked
-          days[d] = null;
+          // In fixed-salary hospitality exception model: defaults to 'present' (100% attendance)
+          days[d] = 'present';
+          totals.present++;
         }
       }
 

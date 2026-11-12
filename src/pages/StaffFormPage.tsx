@@ -353,17 +353,6 @@ export default function StaffFormPage() {
               </div>
             )}
 
-            {/* Default Shift */}
-            <div>
-              <label className="label">Default Shift</label>
-              <input
-                type="text"
-                value={form.default_shift}
-                onChange={(e) => updateField('default_shift', e.target.value)}
-                className="input"
-                placeholder='e.g. Morning, Night (optional)'
-              />
-            </div>
 
             {/* Active checkbox (edit only) */}
             {isEdit && (

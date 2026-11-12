@@ -50,17 +50,19 @@ export default async (req: Request, context: Context) => {
     }
 
     const notMarked = Math.max(0, totalEmployed - totalMarked);
+    // In exception-based attendance for fixed-salary hospitality staff, all unmarked active staff are Present by default
+    const effectivePresent = counts.present + notMarked;
 
     return jsonResponse({
       date,
       total_employed: totalEmployed,
-      present: counts.present,
+      present: effectivePresent,
       absent: counts.absent,
       half_day: counts.half_day,
       weekly_off: counts.weekly_off,
       paid_leave: counts.paid_leave,
       unpaid_leave: counts.unpaid_leave,
-      not_marked: notMarked,
+      not_marked: 0,
     });
   } catch (err: any) {
     console.error('dashboard error:', err);

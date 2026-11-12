@@ -669,16 +669,6 @@ export default function AttendancePage() {
                     </select>
                   </div>
 
-                  <div className="attendance-field">
-                    <label>Shift</label>
-                    <input
-                      type="text"
-                      value={shift}
-                      onChange={e => updateEntry(staff.id, 'shift', e.target.value)}
-                      placeholder={staff.default_shift || 'e.g. Morning, Night'}
-                      disabled={!isEditable}
-                    />
-                  </div>
 
                   <div className="attendance-field">
                     <label>Check In</label>

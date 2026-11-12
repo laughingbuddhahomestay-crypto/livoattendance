@@ -205,12 +205,13 @@ export async function generateEmployeeMonthlyReportData(db: any, staffId: string
         label: STATUS_LABELS[rec.status] || rec.status,
       });
     } else {
-      totals.not_marked++;
+      // In fixed-salary hospitality model, unrecorded days default to Present (100% attendance)
+      totals.present++;
       dailyRows.push({
         day,
         date: dateStr,
-        status: 'not_marked',
-        label: 'Not Marked',
+        status: 'present',
+        label: 'Present',
       });
     }
   }

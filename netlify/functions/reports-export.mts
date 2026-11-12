@@ -165,7 +165,9 @@ export default async (req: Request, context: Context) => {
             }
           }
         } else {
-          rowValues.push('NM'); // Not marked
+          // Employed, past date, but not explicitly marked: defaults to 'P' (Present)
+          rowValues.push('P');
+          totals.present++;
         }
       }
 
