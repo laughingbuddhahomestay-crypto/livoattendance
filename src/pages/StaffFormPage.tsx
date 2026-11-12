@@ -29,8 +29,8 @@ const emptyForm: StaffFormData = {
   department: '',
   phone: '',
   email: '',
-  notify_absence: false,
-  notify_monthly_report: false,
+  notify_absence: true,
+  notify_monthly_report: true,
   joining_date: '',
   leaving_date: '',
   default_shift: '',
@@ -307,7 +307,7 @@ export default function StaffFormPage() {
                     onChange={(e) => updateField('notify_monthly_report', e.target.checked)}
                   />
                   <span style={{ fontSize: '0.85rem' }}>
-                    Send monthly attendance report summary on the 1st
+                    Send monthly statement (total attendance, absent, and leaves) on the 1st of next month
                   </span>
                 </label>
               </div>

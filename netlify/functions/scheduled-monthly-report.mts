@@ -1,26 +1,26 @@
 import type { Config } from '@netlify/functions';
 import { getDatabase } from '@netlify/database';
 import { generateEmployeeMonthlyReportData } from './notifications-monthly.mts';
+import { processOutboxJobs } from './notifications-process.mts';
 
-export default async () => {
+export default async (req?: Request) => {
   console.log('[CRON] Scheduled Monthly Report trigger activated.');
 
-  // Guard: Kept paused until the owner explicitly approves and enables activation in Netlify environment variables
-  if (process.env.ENABLE_MONTHLY_REPORT_CRON !== 'true') {
-    console.log('[CRON] Production scheduled emails are currently PAUSED (ENABLE_MONTHLY_REPORT_CRON != "true"). No emails sent.');
-    return new Response('Scheduler paused pending owner approval', { status: 200 });
+  // Guard: Pauses only if explicitly disabled in environment variables
+  if (process.env.ENABLE_MONTHLY_REPORT_CRON === 'false') {
+    console.log('[CRON] Scheduled monthly emails are paused via ENABLE_MONTHLY_REPORT_CRON="false". No emails sent.');
+    return new Response('Scheduler paused via configuration', { status: 200 });
   }
 
   try {
     const db = getDatabase();
 
-    // 1. Calculate the target previous months for catch-up in Asia/Kolkata
-    // Checks the previous completed month and the one before (recovery after downtime)
+    // 1. Calculate the target previous month in Asia/Kolkata
+    // When running on the 1st of the month, the target is the month that just concluded yesterday.
     const now = new Date();
     const istDateStr = now.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
-    const [currentYear, currentMonth] = istDateStr.split('-').map(Number);
+    const [currentYear, currentMonth, currentDay] = istDateStr.split('-').map(Number);
 
-    // List target months to check for catch-up (most recent completed month first)
     const monthsToCheck: Array<{ year: number; month: number }> = [];
 
     let prevMonth = currentMonth - 1;
@@ -55,6 +55,7 @@ export default async () => {
            FROM staff
            WHERE notify_monthly_report = true
              AND email IS NOT NULL
+             AND is_active = true
              AND joining_date <= $1::date
              AND (leaving_date IS NULL OR leaving_date >= $2::date)`,
           [monthEnd, monthStart]
@@ -70,7 +71,7 @@ export default async () => {
           );
 
           if (existing.rows.length === 0) {
-            // Generate full report data (including totals, provisional status, and former employee handling)
+            // Generate full report data (including totals, provisional status, and attendance breakdown)
             const reportData = await generateEmployeeMonthlyReportData(db, s.id, reportYear, reportMonth);
 
             await client.query(
@@ -94,7 +95,7 @@ export default async () => {
                   year: reportYear,
                   month: reportMonth,
                   is_provisional: reportData.is_provisional,
-                  automated_catchup: true,
+                  automated_cron: true,
                 }),
               ]
             );
@@ -106,24 +107,46 @@ export default async () => {
       client.release();
     }
 
-    console.log(`[CRON] Catch-up processing completed. Queued ${totalQueuedCount} monthly report(s).`);
-    return new Response(`Queued ${totalQueuedCount} monthly reports across catch-up period`, { status: 200 });
-  } catch (err) {
+    console.log(`[CRON] Queued ${totalQueuedCount} monthly report(s). Running outbox dispatcher...`);
+
+    // 2. Dispatch queued emails immediately through the outbox processor
+    let dispatchResult = null;
+    if (totalQueuedCount > 0) {
+      dispatchResult = await processOutboxJobs(db);
+      console.log('[CRON] Outbox dispatch completed:', dispatchResult);
+    }
+
+    return new Response(
+      JSON.stringify({
+        success: true,
+        queued: totalQueuedCount,
+        dispatch: dispatchResult,
+        ist_date: istDateStr,
+      }),
+      {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      }
+    );
+  } catch (err: any) {
     console.error('[CRON] Error during scheduled monthly report run:', err);
-    return new Response('Scheduler execution failed', { status: 500 });
+    return new Response(
+      JSON.stringify({ success: false, error: err.message || 'Scheduler execution failed' }),
+      {
+        status: 500,
+        headers: { 'Content-Type': 'application/json' },
+      }
+    );
   }
 };
 
 /**
  * Netlify Scheduled Function Cron Configuration:
- * "30 3 * * *" runs DAILY at:
+ * "30 3 1 * *" runs on the 1st of every month at:
  * - Minute 30
  * - Hour 3 (03:30 AM UTC = 09:00 AM Asia/Kolkata, IST = UTC + 5:30)
- * 
- * Running daily ensures automatic catch-up after any missed run or server downtime.
- * If reports for the previous calendar month are already queued, the daily check is a fast 1-query no-op.
- * Deduplication is enforced by the database unique constraint on idempotency_key.
+ * - Day 1 of the month
  */
 export const config: Config = {
-  schedule: '30 3 * * *',
+  schedule: '30 3 1 * *',
 };

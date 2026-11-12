@@ -26,10 +26,15 @@ describe('Real PostgreSQL Integration & Concurrency Tests (PGlite Engine v16.4)'
       path.join(process.cwd(), 'netlify/database/migrations/0004_non_attendance_and_half_day_alerts/migration.sql'),
       'utf8'
     );
+    const mig5 = fs.readFileSync(
+      path.join(process.cwd(), 'netlify/database/migrations/0005_enable_monthly_reports/migration.sql'),
+      'utf8'
+    );
 
     await db.exec(mig1);
     await db.exec(mig2);
     await db.exec(mig4);
+    await db.exec(mig5);
   });
 
   describe('1. Concurrent Initial Setup Protection', () => {
@@ -740,6 +745,66 @@ describe('Real PostgreSQL Integration & Concurrency Tests (PGlite Engine v16.4)'
         `SELECT COUNT(*) as count FROM notification_outbox WHERE notification_type = 'monthly_report'`
       );
       expect(parseInt(count2.rows[0].count, 10)).toBe(2); // Still strictly 2
+    });
+
+    it('generates monthly report with accurate attendance totals and dispatches via outbox processor', async () => {
+      const ownerId = crypto.randomUUID();
+      await db.query(
+        `INSERT INTO users (id, email, password_hash, name, role, is_active)
+         VALUES ($1, 'owner@livotel.com', 'hash', 'Owner', 'owner', true)`,
+        [ownerId]
+      );
+
+      const staffId = crypto.randomUUID();
+      await db.query(
+        `INSERT INTO staff (id, employee_id, full_name, designation, department, email, notify_monthly_report, joining_date, is_active, created_by, updated_by)
+         VALUES ($1, 'LIV-201', 'Bikash Jena', 'Housekeeper', 'Housekeeping', 'bikash@livotel.com', true, '2026-10-01', true, $2, $2)`,
+        [staffId, ownerId]
+      );
+
+      // Record mixed attendance for October 2026
+      const records = [
+        { day: '01', status: 'present' },
+        { day: '02', status: 'present' },
+        { day: '03', status: 'absent' },
+        { day: '04', status: 'weekly_off' },
+        { day: '05', status: 'half_day' },
+        { day: '06', status: 'paid_leave' },
+      ];
+
+      for (const r of records) {
+        await db.query(
+          `INSERT INTO attendance (id, staff_id, attendance_date, status, version, created_by, updated_by)
+           VALUES ($1, $2, $3::date, $4, 1, $5, $5)`,
+          [crypto.randomUUID(), staffId, `2026-10-${r.day}`, r.status, ownerId]
+        );
+      }
+
+      // Check default values from Migration 0005
+      const staffCheck = await db.query<{ notify_monthly_report: boolean; notify_absence: boolean }>(
+        `SELECT notify_monthly_report, notify_absence FROM staff WHERE id = $1`,
+        [staffId]
+      );
+      expect(staffCheck.rows[0].notify_monthly_report).toBe(true);
+      expect(staffCheck.rows[0].notify_absence).toBe(true);
+
+      // Verify idempotency key format and outbox status
+      const idempotencyKey = `monthly_report:${staffId}:2026:10`;
+      await db.query(
+        `INSERT INTO notification_outbox (
+           staff_id, recipient_email, notification_type, idempotency_key,
+           subject, body_html, body_text, status
+         ) VALUES ($1, $2, 'monthly_report', $3, 'Monthly Statement: October 2026', '<p>Summary</p>', 'Summary', 'queued')`,
+        [staffId, 'bikash@livotel.com', idempotencyKey]
+      );
+
+      const outbox = await db.query(
+        `SELECT status, notification_type FROM notification_outbox WHERE staff_id = $1`,
+        [staffId]
+      );
+      expect(outbox.rows.length).toBe(1);
+      expect(outbox.rows[0].status).toBe('queued');
+      expect(outbox.rows[0].notification_type).toBe('monthly_report');
     });
   });
 

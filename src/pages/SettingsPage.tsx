@@ -675,6 +675,13 @@ export default function SettingsPage() {
 
           {/* Section A: Manual Monthly Report Dispatch & Preview */}
           <div className="card mb-2">
+            <div style={{ background: '#e0f2fe', border: '1px solid #7dd3fc', borderRadius: '6px', padding: '0.75rem 1rem', marginBottom: '1.25rem', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+              <span style={{ fontSize: '1.25rem' }}>📅</span>
+              <div style={{ fontSize: '0.85rem', color: '#0369a1' }}>
+                <strong>Automated 1st-of-Month Scheduler:</strong> Active and scheduled to run automatically on the <strong>1st of every month at 09:00 AM IST</strong>. All staff with an email and notifications enabled receive a detailed statement of total attendance, absent days, half days, and approved leaves for the concluding month.
+              </div>
+            </div>
+
             <h3 className="card-title">Staff Monthly Report Email Dispatch</h3>
             <p className="text-sm text-muted mb-2">
               Preview and send an individual employee their monthly attendance report. Only the employee's own records are included.
