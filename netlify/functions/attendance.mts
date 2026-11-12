@@ -43,7 +43,7 @@ function getAlertDetails(
       subject: `Attendance Notice: Marked Absent on ${date} — Livotel Premium Hotel`,
       bodyText: `Dear ${staffName},\n\nThis is an automated notification from Livotel Premium Hotel, Bhubaneswar.\n\nYou have been marked Absent for duty on ${date} (Asia/Kolkata).\n\nIf this was recorded in error or you have an approved leave arrangement, please contact your hotel manager immediately.\n\nWarm regards,\nManagement\nLivotel Premium Hotel, Bhubaneswar`,
       bodyHtml: `
-        <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 8px;">
+        <div style="font-family: sans-serif; max-width: 600px; width: 100%; box-sizing: border-box; margin: 0 auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 8px;">
           <h2 style="color: #1B2A4A; margin-top: 0;">Livotel Premium Hotel, Bhubaneswar</h2>
           <p style="font-size: 16px;">Dear <strong>${staffName}</strong>,</p>
           <p style="font-size: 15px; color: #333;">You have been marked <strong>Absent</strong> for duty on <strong>${date}</strong> (Asia/Kolkata).</p>
@@ -62,7 +62,7 @@ function getAlertDetails(
       subject: `Attendance Notice: Marked Half Day on ${date} — Livotel Premium Hotel`,
       bodyText: `Dear ${staffName},\n\nThis is an automated notification from Livotel Premium Hotel, Bhubaneswar.\n\nYou have been marked for Half Day duty on ${date} (Asia/Kolkata).\n\nIf your recorded shift timing or hours require adjustment, please contact your hotel manager.\n\nWarm regards,\nManagement\nLivotel Premium Hotel, Bhubaneswar`,
       bodyHtml: `
-        <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 8px;">
+        <div style="font-family: sans-serif; max-width: 600px; width: 100%; box-sizing: border-box; margin: 0 auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 8px;">
           <h2 style="color: #1B2A4A; margin-top: 0;">Livotel Premium Hotel, Bhubaneswar</h2>
           <p style="font-size: 16px;">Dear <strong>${staffName}</strong>,</p>
           <p style="font-size: 15px; color: #333;">You have been marked for <strong>Half Day</strong> duty on <strong>${date}</strong> (Asia/Kolkata).</p>
@@ -81,7 +81,7 @@ function getAlertDetails(
       subject: `Attendance Notice: Marked Unpaid Leave on ${date} — Livotel Premium Hotel`,
       bodyText: `Dear ${staffName},\n\nThis is an automated notification from Livotel Premium Hotel, Bhubaneswar.\n\nYou have been marked for Unpaid Leave on ${date} (Asia/Kolkata).\n\nIf this was recorded in error, please contact your hotel manager immediately.\n\nWarm regards,\nManagement\nLivotel Premium Hotel, Bhubaneswar`,
       bodyHtml: `
-        <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 8px;">
+        <div style="font-family: sans-serif; max-width: 600px; width: 100%; box-sizing: border-box; margin: 0 auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 8px;">
           <h2 style="color: #1B2A4A; margin-top: 0;">Livotel Premium Hotel, Bhubaneswar</h2>
           <p style="font-size: 16px;">Dear <strong>${staffName}</strong>,</p>
           <p style="font-size: 15px; color: #333;">You have been marked for <strong>Unpaid Leave</strong> on <strong>${date}</strong> (Asia/Kolkata).</p>
@@ -112,7 +112,7 @@ function getCorrectionDetails(
     subject: `Attendance Correction: Status Updated to ${newLabel} on ${date} — Livotel Premium Hotel`,
     bodyText: `Dear ${staffName},\n\nThis is an automated update from Livotel Premium Hotel, Bhubaneswar.\n\nYour attendance record for ${date} has been updated from ${oldLabel} to ${newLabel}.\n\nIf you have any questions, please contact your hotel manager.\n\nWarm regards,\nManagement\nLivotel Premium Hotel, Bhubaneswar`,
     bodyHtml: `
-      <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 8px;">
+      <div style="font-family: sans-serif; max-width: 600px; width: 100%; box-sizing: border-box; margin: 0 auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 8px;">
         <h2 style="color: #1B2A4A; margin-top: 0;">Livotel Premium Hotel, Bhubaneswar</h2>
         <p style="font-size: 16px;">Dear <strong>${staffName}</strong>,</p>
         <p style="font-size: 15px; color: #333;">Your attendance record for <strong>${date}</strong> has been updated from <strong>${oldLabel}</strong> to <strong>${newLabel}</strong>.</p>
