@@ -62,25 +62,25 @@ export default function DashboardPage() {
 
   return (
     <div>
-      <div className="page-header">
-        <div style={{ textAlign: 'center', marginBottom: '0.5rem' }}>
-          <h2 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 700, color: '#1e293b' }}>
-            🏨 Livotel Premium Hotel, Bhubaneswar
-          </h2>
+      <div className="card dashboard-welcome-card mb-2">
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '1rem' }}>
+          <div>
+            <div className="hotel-subtitle-badge">Bhubaneswar, Odisha</div>
+            <h1 className="hotel-welcome-title">Livotel Premium Hotel</h1>
+            <p className="hotel-date-subtitle">Daily Attendance & Duty Overview • {displayDate}</p>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+            <span style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--gray-700)' }}>Date:</span>
+            <input
+              type="date"
+              value={date}
+              max={todayIST()}
+              onChange={(e) => setDate(e.target.value)}
+              className="input date-picker-input"
+              style={{ maxWidth: '175px' }}
+            />
+          </div>
         </div>
-        <h1 className="page-title">Dashboard</h1>
-        <p style={{ color: '#64748b', margin: '0.25rem 0 0' }}>{displayDate}</p>
-      </div>
-
-      <div className="toolbar">
-        <input
-          type="date"
-          value={date}
-          max={todayIST()}
-          onChange={(e) => setDate(e.target.value)}
-          className="input"
-          style={{ maxWidth: '200px' }}
-        />
       </div>
 
       {error && <ErrorBanner message={error} onRetry={fetchDashboard} />}

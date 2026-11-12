@@ -140,7 +140,7 @@ export default function ReportsPage() {
     <div className="reports-page">
       {/* Printable header */}
       <div className="print-header">
-        <img src="/logo-light.png" alt="Livotel Premium Hotel" />
+        <img src="/logo-light.png" alt="Livotel Premium Hotel" style={{ maxHeight: '48px', width: 'auto', marginBottom: '8px' }} />
         <h2>Livotel Premium Hotel, Bhubaneswar</h2>
         <h3>Staff Monthly Attendance Report — {MONTH_NAMES[month - 1]} {year}</h3>
       </div>

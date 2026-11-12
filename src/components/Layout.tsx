@@ -36,15 +36,24 @@ export default function Layout() {
           >
             ☰
           </button>
-          <img src="/logo-light.png" alt="Livotel" className="header-logo" />
-          <span className="header-title">Livotel Attendance</span>
+          <div className="header-brand">
+            <div className="header-logo-badge">
+              <img src="/logo-light.png" alt="Livotel" className="header-logo" />
+            </div>
+            <div className="header-brand-text">
+              <span className="header-title">Livotel Premium Hotel</span>
+              <span className="header-subtitle desktop-only">Staff Attendance</span>
+            </div>
+          </div>
         </div>
         <div className="header-right">
           <span className="header-user">
-            {user?.name}
-            <span className="role-badge">{user?.role === 'owner' ? 'Owner' : 'Manager'}</span>
+            <span className="header-user-name">{user?.name}</span>
+            <span className={`role-badge role-${user?.role || 'manager'}`}>
+              {user?.role === 'owner' ? '★ Owner' : 'Manager'}
+            </span>
           </span>
-          <button className="btn btn-sm btn-outline" onClick={handleLogout}>
+          <button className="btn btn-sm btn-header-logout" onClick={handleLogout}>
             Sign Out
           </button>
         </div>
