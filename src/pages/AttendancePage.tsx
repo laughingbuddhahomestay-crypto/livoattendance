@@ -121,12 +121,16 @@ export default function AttendancePage() {
     for (const s of sortedStaff) {
       const entry = editedEntries.get(s.id);
       const original = originalRecords.get(s.id);
-      const currentStatus = entry?.status !== undefined ? entry.status : original?.status;
+      const currentStatus =
+        entry?.status !== undefined
+          ? entry.status
+          : (original?.status !== undefined ? original.status : 'present');
 
-      if (!currentStatus) {
+      if (!original && !entry) {
         notMarked++;
-        nonAttendance++;
-      } else if (currentStatus === 'absent' || currentStatus === 'unpaid_leave') {
+      }
+
+      if (currentStatus === 'absent' || currentStatus === 'unpaid_leave') {
         if (currentStatus === 'absent') absent++;
         nonAttendance++;
       } else {
@@ -150,7 +154,10 @@ export default function AttendancePage() {
       if (statusFilter !== 'all') {
         const entry = editedEntries.get(s.id);
         const original = originalRecords.get(s.id);
-        const currentStatus = entry?.status !== undefined ? entry.status : original?.status;
+        const currentStatus =
+          entry?.status !== undefined
+            ? entry.status
+            : (original?.status !== undefined ? original.status : 'present');
 
         if (statusFilter === 'attendance') {
           // Attendance includes Present, Half Day, Paid Leave, Weekly Off
@@ -158,12 +165,12 @@ export default function AttendancePage() {
             return false;
           }
         } else if (statusFilter === 'non_attendance') {
-          // Non-attendance includes Absent, Unpaid Leave, or Not Marked
-          if (currentStatus && currentStatus !== 'absent' && currentStatus !== 'unpaid_leave') {
+          // Non-attendance includes Absent, Unpaid Leave
+          if (currentStatus !== 'absent' && currentStatus !== 'unpaid_leave') {
             return false;
           }
         } else if (statusFilter === 'not_marked') {
-          if (currentStatus) return false;
+          if (original || entry) return false;
         } else {
           if (currentStatus !== statusFilter) return false;
         }
@@ -205,6 +212,9 @@ export default function AttendancePage() {
     if (original && (original as any)[field] !== undefined) {
       return (original as any)[field];
     }
+    if (field === 'status') {
+      return 'present'; // Default unmarked staff to Present
+    }
     if (field === 'shift') {
       const staff = staffList.find(s => s.id === staffId);
       return staff?.default_shift || '';
@@ -226,8 +236,8 @@ export default function AttendancePage() {
 
         const updated = { ...existing, [field]: value };
 
-        // Check if identical to original
-        const origStatus = original?.status || '';
+        // Check if identical to original (or identical to default 'present' for new entry)
+        const origStatus = original?.status || 'present';
         const origShift = original?.shift || '';
         const origCheckIn = original?.check_in || '';
         const origCheckOut = original?.check_out || '';
@@ -240,8 +250,7 @@ export default function AttendancePage() {
         const curNotes = updated.notes !== undefined ? updated.notes : origNotes;
 
         if (
-          original &&
-          curStatus === origStatus &&
+          ((original && curStatus === origStatus) || (!original && curStatus === 'present')) &&
           curShift === origShift &&
           isSameTime(curCheckIn, origCheckIn) &&
           isSameTime(curCheckOut, origCheckOut) &&
@@ -367,13 +376,27 @@ export default function AttendancePage() {
   );
 
   const handleSave = useCallback(async () => {
-    if (editedEntries.size === 0) return;
+    // Collect all entries to save:
+    // 1. All explicitly edited entries
+    // 2. Any staff not yet marked in the DB (default to 'present')
+    const fullEntries = new Map(editedEntries);
+    for (const staff of staffList) {
+      if (!originalRecords.has(staff.id) && !fullEntries.has(staff.id)) {
+        fullEntries.set(staff.id, {
+          staff_id: staff.id,
+          status: 'present',
+          shift: staff.default_shift || '',
+        });
+      }
+    }
 
-    // Check for updates that need an audit reason
+    if (fullEntries.size === 0) return;
+
+    // Check for updates that need an audit reason (only for previously existing records whose status changed)
     const updatesNeedingReason: string[] = [];
-    editedEntries.forEach((entry, staffId) => {
+    fullEntries.forEach((entry, staffId) => {
       const original = originalRecords.get(staffId);
-      if (original && !entry.reason) {
+      if (original && entry.status !== undefined && entry.status !== original.status && !entry.reason) {
         updatesNeedingReason.push(staffId);
       }
     });
@@ -388,12 +411,21 @@ export default function AttendancePage() {
       return;
     }
 
-    await performSave();
-  }, [editedEntries, originalRecords, performSave]);
+    await performSave(fullEntries);
+  }, [editedEntries, staffList, originalRecords, performSave]);
 
   const handleReasonSubmit = useCallback(() => {
     const { staffIds, reasons } = reasonDialog;
     const nextMap = new Map(editedEntries);
+    for (const staff of staffList) {
+      if (!originalRecords.has(staff.id) && !nextMap.has(staff.id)) {
+        nextMap.set(staff.id, {
+          staff_id: staff.id,
+          status: 'present',
+          shift: staff.default_shift || '',
+        });
+      }
+    }
     for (const staffId of staffIds) {
       const entry = nextMap.get(staffId);
       if (entry) {
@@ -406,7 +438,7 @@ export default function AttendancePage() {
     setEditedEntries(nextMap);
     setReasonDialog({ open: false, staffIds: [], reasons: new Map(), currentIndex: 0 });
     performSave(nextMap);
-  }, [reasonDialog, editedEntries, performSave]);
+  }, [reasonDialog, editedEntries, staffList, originalRecords, performSave]);
 
   const toggleNotes = (staffId: string) => {
     setExpandedNotes(prev => {
@@ -552,8 +584,19 @@ export default function AttendancePage() {
           <option value="not_marked">Not Marked ({counts.notMarked})</option>
         </select>
         {isEditable && (
-          <button className="btn btn-outline" onClick={markAllPresent}>
-            Mark All Present (Draft)
+          <button
+            className="btn btn-primary"
+            onClick={handleSave}
+            disabled={saving || (counts.notMarked === 0 && !hasChanges)}
+            style={{ fontWeight: 600 }}
+          >
+            {saving
+              ? 'Saving…'
+              : counts.notMarked > 0
+              ? `💾 Save Attendance (${counts.total} Staff)`
+              : hasChanges
+              ? `💾 Save Changes (${editedEntries.size})`
+              : '✓ Saved to Database'}
           </button>
         )}
       </div>
@@ -764,11 +807,11 @@ export default function AttendancePage() {
                     style={{
                       marginTop: '0.4rem',
                       fontSize: '0.72rem',
-                      color: '#94a3b8',
-                      fontStyle: 'italic',
+                      color: '#059669',
+                      fontWeight: 500,
                     }}
                   >
-                    Not yet marked by manager
+                    ● Pre-filled as Present • Ready to save
                   </div>
                 )}
               </div>
