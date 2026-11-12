@@ -113,6 +113,11 @@ export default function StaffFormPage() {
     e.preventDefault();
     if (!validate()) return;
 
+    if (form.leaving_date && form.joining_date && form.leaving_date < form.joining_date) {
+      setError('Leaving date cannot be earlier than joining date.');
+      return;
+    }
+
     setSubmitting(true);
     setError('');
     try {
@@ -134,10 +139,11 @@ export default function StaffFormPage() {
       }
 
       if (isEdit) {
-        payload.leaving_date = form.leaving_date || undefined;
+        payload.leaving_date = form.leaving_date ? form.leaving_date : null;
         payload.is_active = form.is_active;
         await api.updateStaff(id!, payload);
       } else {
+        payload.leaving_date = form.leaving_date ? form.leaving_date : undefined;
         await api.createStaff(payload);
       }
       navigate('/staff');

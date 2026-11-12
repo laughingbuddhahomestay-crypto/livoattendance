@@ -80,6 +80,10 @@ export default async (req: Request, context: Context) => {
         return errorResponse('employee_id, full_name, designation, department, and joining_date are required');
       }
 
+      if (leaving_date && joining_date && leaving_date < joining_date) {
+        return errorResponse('Leaving date cannot be earlier than joining date', 400);
+      }
+
       // Validate email format if provided
       let cleanEmail: string | null = null;
       if (email && typeof email === 'string' && email.trim().length > 0) {
@@ -176,14 +180,20 @@ export default async (req: Request, context: Context) => {
         }
         const current = curRes.rows[0];
 
-        let finalLeavingDate = leaving_date !== undefined ? leaving_date : current.leaving_date;
+        let finalLeavingDate = leaving_date !== undefined ? (leaving_date || null) : current.leaving_date;
         const finalIsActive = is_active !== undefined ? Boolean(is_active) : current.is_active;
 
         // If being deactivated and no leaving date set, default to today IST
         if (!finalIsActive && !finalLeavingDate) {
           finalLeavingDate = todayIST();
-        } else if (finalIsActive && leaving_date === null) {
+        } else if (finalIsActive && (leaving_date === null || leaving_date === '')) {
           finalLeavingDate = null;
+        }
+
+        const effectiveJoining = joining_date || current.joining_date;
+        if (finalLeavingDate && effectiveJoining && finalLeavingDate < effectiveJoining) {
+          await client.query('ROLLBACK');
+          return errorResponse('Leaving date cannot be earlier than joining date', 400);
         }
 
         const finalEmail = cleanEmail !== undefined ? cleanEmail : current.email;

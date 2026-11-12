@@ -317,6 +317,19 @@ export default async (req: Request, context: Context) => {
               continue; // Do not overwrite conflicting record
             }
 
+            const updatedStatus = status || existing.status;
+            const updatedShift = shift !== undefined ? (shift || null) : existing.shift;
+            const updatedCheckIn = check_in !== undefined ? validCheckIn : existing.check_in;
+            const updatedCheckOut = check_out !== undefined ? validCheckOut : existing.check_out;
+            const updatedNotes = notes !== undefined ? (notes || null) : existing.notes;
+
+            if (updatedCheckIn && updatedCheckOut) {
+              if (new Date(updatedCheckOut).getTime() <= new Date(updatedCheckIn).getTime()) {
+                await client.query('ROLLBACK');
+                return errorResponse('Check-out time must be after check-in time (even for overnight shifts)');
+              }
+            }
+
             const previousValues = {
               status: existing.status,
               shift: existing.shift,
@@ -327,11 +340,11 @@ export default async (req: Request, context: Context) => {
             };
 
             const newValues = {
-              status,
-              shift: shift || null,
-              check_in: validCheckIn,
-              check_out: validCheckOut,
-              notes: notes || null,
+              status: updatedStatus,
+              shift: updatedShift,
+              check_in: updatedCheckIn,
+              check_out: updatedCheckOut,
+              notes: updatedNotes,
             };
 
             // Update record
@@ -348,11 +361,11 @@ export default async (req: Request, context: Context) => {
                WHERE id = $7
                RETURNING version`,
               [
-                status,
-                shift || null,
-                validCheckIn,
-                validCheckOut,
-                notes || null,
+                updatedStatus,
+                updatedShift,
+                updatedCheckIn,
+                updatedCheckOut,
+                updatedNotes,
                 user.userId,
                 existing.id,
               ]
@@ -380,9 +393,21 @@ export default async (req: Request, context: Context) => {
 
             // Queue notification / correction transactionally for non-attendance or half-day
             if (s.email && s.notify_absence) {
-              if (ALERT_STATUSES.has(status) && status !== existing.status) {
+              if (ALERT_STATUSES.has(updatedStatus) && updatedStatus !== existing.status) {
+                // Cancel any previously queued alerts for this staff/date to avoid duplicate or conflicting alerts
+                await client.query(
+                  `UPDATE notification_outbox
+                   SET status = 'cancelled',
+                       error_message = $1,
+                       updated_at = NOW()
+                   WHERE staff_id = $2
+                     AND metadata->>'date' = $3
+                     AND status = 'queued'`,
+                  [`Superseded: updated to ${STATUS_DISPLAY[updatedStatus] || updatedStatus}`, staff_id, date]
+                );
+
                 // Transition INTO an alert status (absent, half_day, unpaid_leave)
-                const alert = getAlertDetails(status, s.full_name, date);
+                const alert = getAlertDetails(updatedStatus, s.full_name, date);
                 if (alert) {
                   const idempotencyKey = `${alert.notificationType}:${staff_id}:${date}:${newVersion}`;
                   await client.query(
@@ -400,32 +425,26 @@ export default async (req: Request, context: Context) => {
                       alert.subject,
                       alert.bodyHtml,
                       alert.bodyText,
-                      JSON.stringify({ date, status, staff_id, full_name: s.full_name }),
+                      JSON.stringify({ date, status: updatedStatus, staff_id, full_name: s.full_name }),
                     ]
                   );
                 }
-              } else if (ALERT_STATUSES.has(existing.status) && !ALERT_STATUSES.has(status)) {
+              } else if (ALERT_STATUSES.has(existing.status) && !ALERT_STATUSES.has(updatedStatus)) {
                 // Corrected from an alert status to a normal attendance status (e.g. Present)
-                // 1. Check for strictly 'queued' alert (worker has NOT touched it yet)
-                const strictlyQueuedAlerts = await client.query(
-                  `SELECT id FROM notification_outbox
-                   WHERE staff_id = $1
-                     AND metadata->>'date' = $2
-                     AND status = 'queued'`,
-                  [staff_id, date]
+                // 1. Cancel ALL strictly 'queued' alerts (worker has NOT touched them yet)
+                const cancelRes = await client.query(
+                  `UPDATE notification_outbox
+                   SET status = 'cancelled',
+                       error_message = $1,
+                       updated_at = NOW()
+                   WHERE staff_id = $2
+                     AND metadata->>'date' = $3
+                     AND status = 'queued'
+                   RETURNING id`,
+                  [`Cancelled before dispatch: corrected to ${STATUS_DISPLAY[updatedStatus] || updatedStatus}`, staff_id, date]
                 );
 
-                if (strictlyQueuedAlerts.rows.length > 0) {
-                  // Safe to cancel before dispatch: worker has not started transmitting to provider
-                  await client.query(
-                    `UPDATE notification_outbox
-                     SET status = 'cancelled',
-                         error_message = $1,
-                         updated_at = NOW()
-                     WHERE id = $2`,
-                    [`Cancelled before dispatch: corrected to ${STATUS_DISPLAY[status] || status}`, strictlyQueuedAlerts.rows[0].id]
-                  );
-                } else {
+                if (cancelRes.rows.length === 0) {
                   // 2. Check if an alert was already in-flight ('processing') or sent ('provider_accepted', 'delivered')
                   const inFlightOrSent = await client.query(
                     `SELECT id, status FROM notification_outbox
@@ -436,7 +455,7 @@ export default async (req: Request, context: Context) => {
                   );
 
                   if (inFlightOrSent.rows.length > 0) {
-                    const corr = getCorrectionDetails(existing.status, status, s.full_name, date);
+                    const corr = getCorrectionDetails(existing.status, updatedStatus, s.full_name, date);
                     const idempotencyKey = `correction:${staff_id}:${date}:${newVersion}`;
                     await client.query(
                       `INSERT INTO notification_outbox (
@@ -456,7 +475,7 @@ export default async (req: Request, context: Context) => {
                         JSON.stringify({
                           date,
                           old_status: existing.status,
-                          new_status: status,
+                          new_status: updatedStatus,
                           staff_id,
                           full_name: s.full_name,
                           previous_alert_status: inFlightOrSent.rows[0].status,

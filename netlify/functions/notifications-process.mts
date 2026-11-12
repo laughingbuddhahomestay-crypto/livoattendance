@@ -176,6 +176,7 @@ export async function processOutboxJobs(db: any) {
             headers: {
               'Authorization': `Bearer ${apiKey}`,
               'Content-Type': 'application/json',
+              'Idempotency-Key': item.idempotency_key,
             },
             body: JSON.stringify(resendPayload),
           });
@@ -265,7 +266,14 @@ export default async (req: Request, context: Context) => {
     return jsonResponse(result);
   } catch (err: any) {
     console.error('notifications-process error:', err);
-    return errorResponse(err.message || 'Outbox processing failed', 500);
+    const status =
+      err.status ||
+      (err.message?.toLowerCase().includes('unauthorized') ||
+      err.message?.toLowerCase().includes('token') ||
+      err.message?.toLowerCase().includes('forbidden')
+        ? 401
+        : 500);
+    return errorResponse(err.message || 'Outbox processing failed', status);
   }
 };
 

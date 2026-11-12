@@ -295,19 +295,29 @@ export default function AttendancePage() {
       setSaveSuccess(false);
       setPartialSaveInfo(null);
       try {
-        const entries = Array.from(activeEntries.values()).map(entry => {
-          const payload: any = {
-            staff_id: entry.staff_id,
-            status: entry.status,
-          };
-          if (entry.shift) payload.shift = entry.shift;
-          if (entry.check_in) payload.check_in = parseDatetimeLocalToIST(entry.check_in);
-          if (entry.check_out) payload.check_out = parseDatetimeLocalToIST(entry.check_out);
-          if (entry.notes) payload.notes = entry.notes;
-          if (entry.version !== undefined) payload.version = entry.version;
-          if (entry.reason) payload.reason = entry.reason;
-          return payload;
-        });
+        const entries = Array.from(activeEntries.values())
+          .map(entry => {
+            const original = originalRecords.get(entry.staff_id);
+            const finalStatus = entry.status !== undefined ? entry.status : original?.status;
+            const finalShift = entry.shift !== undefined ? entry.shift : original?.shift;
+            const finalCheckIn = entry.check_in !== undefined ? entry.check_in : original?.check_in;
+            const finalCheckOut = entry.check_out !== undefined ? entry.check_out : original?.check_out;
+            const finalNotes = entry.notes !== undefined ? entry.notes : original?.notes;
+
+            const payload: any = {
+              staff_id: entry.staff_id,
+              status: finalStatus,
+            };
+            if (finalShift) payload.shift = finalShift;
+            if (finalCheckIn) payload.check_in = parseDatetimeLocalToIST(finalCheckIn);
+            if (finalCheckOut) payload.check_out = parseDatetimeLocalToIST(finalCheckOut);
+            if (finalNotes) payload.notes = finalNotes;
+            if (entry.version !== undefined) payload.version = entry.version;
+            else if (original?.version !== undefined) payload.version = original.version;
+            if (entry.reason) payload.reason = entry.reason;
+            return payload;
+          })
+          .filter(e => Boolean(e.status));
 
         const result: any = await api.saveAttendance({ date, entries });
         const conflicts = result.conflicts || [];

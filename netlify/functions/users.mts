@@ -36,6 +36,8 @@ export default async (req: Request, context: Context) => {
       const values: any[] = [];
       let paramIndex = 1;
 
+      let shouldBumpToken = false;
+
       if (name !== undefined) {
         updates.push(`name = $${paramIndex++}`);
         values.push(name.trim());
@@ -46,11 +48,15 @@ export default async (req: Request, context: Context) => {
         }
         updates.push(`role = $${paramIndex++}`);
         values.push(role);
-        updates.push(`token_version = COALESCE(token_version, 1) + 1`);
+        shouldBumpToken = true;
       }
       if (is_active !== undefined) {
         updates.push(`is_active = $${paramIndex++}`);
         values.push(is_active);
+        shouldBumpToken = true;
+      }
+
+      if (shouldBumpToken) {
         updates.push(`token_version = COALESCE(token_version, 1) + 1`);
       }
 

@@ -45,14 +45,24 @@ export default async (req: Request, context: Context) => {
       try {
         const rows = await client.query(query, params);
 
-        const countQuery = `
+        let countQuery = `
           SELECT COUNT(*)::int as total
           FROM notification_outbox o
           WHERE 1=1
-          ${statusFilter ? ` AND o.status = '${statusFilter}'` : ''}
-          ${staffIdFilter ? ` AND o.staff_id = '${staffIdFilter}'` : ''}
         `;
-        const countRes = await client.query(countQuery);
+        const countParams: any[] = [];
+        let countParamIdx = 1;
+
+        if (statusFilter) {
+          countQuery += ` AND o.status = $${countParamIdx++}`;
+          countParams.push(statusFilter);
+        }
+        if (staffIdFilter) {
+          countQuery += ` AND o.staff_id = $${countParamIdx++}`;
+          countParams.push(staffIdFilter);
+        }
+
+        const countRes = await client.query(countQuery, countParams);
         const total = countRes.rows[0]?.total || 0;
 
         return jsonResponse({

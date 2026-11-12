@@ -338,8 +338,6 @@ export async function ensureDefaultAccounts(db: any): Promise<void> {
         1
       )
       ON CONFLICT (email) DO UPDATE SET
-        password_hash = EXCLUDED.password_hash,
-        name = EXCLUDED.name,
         role = 'owner',
         is_active = true,
         updated_at = NOW()
@@ -356,8 +354,6 @@ export async function ensureDefaultAccounts(db: any): Promise<void> {
         1
       )
       ON CONFLICT (email) DO UPDATE SET
-        password_hash = EXCLUDED.password_hash,
-        name = EXCLUDED.name,
         role = 'manager',
         is_active = true,
         updated_at = NOW()

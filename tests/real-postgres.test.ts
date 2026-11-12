@@ -34,12 +34,17 @@ describe('Real PostgreSQL Integration & Concurrency Tests (PGlite Engine v16.4)'
       path.join(process.cwd(), 'netlify/database/migrations/0006_performance_and_compute_optimization/migration.sql'),
       'utf8'
     );
+    const mig7 = fs.readFileSync(
+      path.join(process.cwd(), 'netlify/database/migrations/0007_staff_leaving_date_constraint/migration.sql'),
+      'utf8'
+    );
 
     await db.exec(mig1);
     await db.exec(mig2);
     await db.exec(mig4);
     await db.exec(mig5);
     await db.exec(mig6);
+    await db.exec(mig7);
   });
 
   describe('1. Concurrent Initial Setup Protection', () => {
