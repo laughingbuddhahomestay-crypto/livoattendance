@@ -3,6 +3,7 @@ import {
   calculateHours,
   formatWorkingHours,
   toDatetimeLocalValue,
+  parseDatetimeLocalToIST,
   isSameTime,
   formatDate,
   todayIST,
@@ -112,17 +113,29 @@ describe('Attendance Domain Logic & Helpers', () => {
       });
     });
 
-    it('toDatetimeLocalValue and isSameTime accurately handle timestamp matching', () => {
-      const iso = '2026-11-13T10:30:00.000Z';
-      const localVal = toDatetimeLocalValue(iso);
-      expect(localVal).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/);
+    it('toDatetimeLocalValue and isSameTime accurately handle timestamp matching in Asia/Kolkata', () => {
+      // 04:30:00 UTC = 10:00:00 IST (+05:30)
+      const utcIso = '2026-11-13T04:30:00.000Z';
+      const localVal = toDatetimeLocalValue(utcIso);
+      expect(localVal).toBe('2026-11-13T10:00');
       expect(toDatetimeLocalValue(null)).toBe('');
       expect(toDatetimeLocalValue('invalid')).toBe('');
 
+      // Converting local datetime string back to IST ISO string
+      const parsedIso = parseDatetimeLocalToIST('2026-11-13T10:00');
+      expect(parsedIso).toBe(utcIso);
+
+      // isSameTime compares across UTC ISO string and local datetime string without offset
+      expect(isSameTime('2026-11-13T10:00', utcIso)).toBe(true);
+      expect(isSameTime('2026-11-13T10:30', utcIso)).toBe(false);
       expect(isSameTime(null, null)).toBe(true);
-      expect(isSameTime('2026-11-13T10:00:00.000Z', '2026-11-13T10:00:00.000Z')).toBe(true);
-      expect(isSameTime('2026-11-13T10:00:00.000Z', '2026-11-13T11:00:00.000Z')).toBe(false);
-      expect(isSameTime('2026-11-13T10:00:00.000Z', null)).toBe(false);
+      expect(isSameTime(utcIso, null)).toBe(false);
+    });
+
+    it('formatDate formats Date objects strictly in Asia/Kolkata timezone', () => {
+      // 2026-11-12T20:00:00.000Z is 01:30 AM on 2026-11-13 in Asia/Kolkata (+05:30)
+      const lateUtcDate = new Date('2026-11-12T20:00:00.000Z');
+      expect(formatDate(lateUtcDate)).toBe('2026-11-13');
     });
   });
 });

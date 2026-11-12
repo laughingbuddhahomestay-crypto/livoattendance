@@ -320,17 +320,26 @@ export function calculateHours(
   return Math.round((diff / (1000 * 60 * 60)) * 100) / 100;
 }
 
-/** Format date as YYYY-MM-DD */
+/** Format date as YYYY-MM-DD in Asia/Kolkata timezone */
 export function formatDate(d: Date): string {
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
-  return `${y}-${m}-${day}`;
+  const formatter = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Kolkata',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  });
+  return formatter.format(d);
 }
 
 /** Get today's date in Asia/Kolkata */
 export function todayIST(): string {
-  return new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+  const formatter = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Kolkata',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  });
+  return formatter.format(new Date());
 }
 
 /** Get number of days in a month */
@@ -338,26 +347,47 @@ export function daysInMonth(year: number, month: number): number {
   return new Date(year, month, 0).getDate();
 }
 
-/** Convert timestamp string into local YYYY-MM-DDTHH:mm for datetime-local input */
+/** Convert timestamp string into Asia/Kolkata YYYY-MM-DDTHH:mm for datetime-local input */
 export function toDatetimeLocalValue(dateStr: string | null | undefined): string {
   if (!dateStr) return '';
   const d = new Date(dateStr);
   if (isNaN(d.getTime())) return '';
-  const year = d.getFullYear();
-  const month = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
-  const hours = String(d.getHours()).padStart(2, '0');
-  const minutes = String(d.getMinutes()).padStart(2, '0');
-  return `${year}-${month}-${day}T${hours}:${minutes}`;
+  const formatter = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Kolkata',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hourCycle: 'h23',
+  });
+  const parts = formatter.formatToParts(d);
+  const partMap: Record<string, string> = {};
+  for (const p of parts) partMap[p.type] = p.value;
+  return `${partMap.year}-${partMap.month}-${partMap.day}T${partMap.hour}:${partMap.minute}`;
+}
+
+/** Parse datetime string (local or ISO) into UTC ISO timestamp assuming Asia/Kolkata (+05:30) if offset omitted */
+export function parseDatetimeLocalToIST(str: string | null | undefined): string | null {
+  if (!str) return null;
+  // If string already has explicit timezone offset or Z
+  if (str.includes('Z') || str.includes('+') || (str.split('-').length > 3 && str.lastIndexOf('-') > 10)) {
+    const d = new Date(str);
+    return isNaN(d.getTime()) ? null : d.toISOString();
+  }
+  // Enforce Asia/Kolkata (+05:30)
+  const d = new Date(`${str.length === 16 ? str + ':00' : str}+05:30`);
+  return isNaN(d.getTime()) ? null : d.toISOString();
 }
 
 /** Check if two timestamp or datetime strings represent the same moment */
 export function isSameTime(t1?: string | null, t2?: string | null): boolean {
   if (!t1 && !t2) return true;
   if (!t1 || !t2) return false;
-  const d1 = new Date(t1).getTime();
-  const d2 = new Date(t2).getTime();
-  return !isNaN(d1) && !isNaN(d2) && d1 === d2;
+  const iso1 = parseDatetimeLocalToIST(t1);
+  const iso2 = parseDatetimeLocalToIST(t2);
+  if (!iso1 || !iso2) return false;
+  return new Date(iso1).getTime() === new Date(iso2).getTime();
 }
 
 /** Month names */

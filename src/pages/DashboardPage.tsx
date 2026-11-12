@@ -52,7 +52,8 @@ export default function DashboardPage() {
       ]
     : [];
 
-  const displayDate = new Date(date + 'T00:00:00').toLocaleDateString('en-IN', {
+  const displayDate = new Date(`${date}T00:00:00+05:30`).toLocaleDateString('en-IN', {
+    timeZone: 'Asia/Kolkata',
     weekday: 'long',
     year: 'numeric',
     month: 'long',

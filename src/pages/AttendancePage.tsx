@@ -12,6 +12,7 @@ import {
   todayIST,
   formatWorkingHours,
   toDatetimeLocalValue,
+  parseDatetimeLocalToIST,
   isSameTime,
 } from '../types';
 import LoadingSpinner from '../components/LoadingSpinner';
@@ -300,8 +301,8 @@ export default function AttendancePage() {
             status: entry.status,
           };
           if (entry.shift) payload.shift = entry.shift;
-          if (entry.check_in) payload.check_in = entry.check_in;
-          if (entry.check_out) payload.check_out = entry.check_out;
+          if (entry.check_in) payload.check_in = parseDatetimeLocalToIST(entry.check_in);
+          if (entry.check_out) payload.check_out = parseDatetimeLocalToIST(entry.check_out);
           if (entry.notes) payload.notes = entry.notes;
           if (entry.version !== undefined) payload.version = entry.version;
           if (entry.reason) payload.reason = entry.reason;
@@ -718,7 +719,7 @@ export default function AttendancePage() {
                             {original.updated_by_role || 'MANAGER'}
                           </span>
                           {original.updated_at &&
-                            ` at ${new Date(original.updated_at).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}`}
+                            ` at ${new Date(original.updated_at).toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit' })}`}
                         </span>
                       ) : (
                         <span>
@@ -730,7 +731,7 @@ export default function AttendancePage() {
                             {original.created_by_role || 'MANAGER'}
                           </span>
                           {original.created_at &&
-                            ` at ${new Date(original.created_at).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}`}
+                            ` at ${new Date(original.created_at).toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit' })}`}
                         </span>
                       )}
                     </div>

@@ -20,6 +20,16 @@ const STATUS_DISPLAY: Record<string, string> = {
   unpaid_leave: 'Unpaid Leave',
 };
 
+function parseISTIsoString(dtStr: string): string | null {
+  if (!dtStr) return null;
+  if (dtStr.includes('Z') || dtStr.includes('+') || (dtStr.split('-').length > 3 && dtStr.lastIndexOf('-') > 10)) {
+    const d = new Date(dtStr);
+    return isNaN(d.getTime()) ? null : d.toISOString();
+  }
+  const d = new Date(`${dtStr.length === 16 ? dtStr + ':00' : dtStr}+05:30`);
+  return isNaN(d.getTime()) ? null : d.toISOString();
+}
+
 export default async (req: Request, context: Context) => {
   try {
     const user = await requireAuth(req);
@@ -136,24 +146,22 @@ export default async (req: Request, context: Context) => {
             return errorResponse(`Invalid attendance status: ${status}`);
           }
 
-          // Validate check-in / check-out timestamps
+          // Validate check-in / check-out timestamps in Asia/Kolkata (IST)
           let validCheckIn: string | null = null;
           let validCheckOut: string | null = null;
           if (check_in) {
-            const inDate = new Date(check_in);
-            if (isNaN(inDate.getTime())) {
+            validCheckIn = parseISTIsoString(check_in);
+            if (!validCheckIn) {
               await client.query('ROLLBACK');
               return errorResponse(`Invalid check_in time for staff ${staff_id}`);
             }
-            validCheckIn = inDate.toISOString();
           }
           if (check_out) {
-            const outDate = new Date(check_out);
-            if (isNaN(outDate.getTime())) {
+            validCheckOut = parseISTIsoString(check_out);
+            if (!validCheckOut) {
               await client.query('ROLLBACK');
               return errorResponse(`Invalid check_out time for staff ${staff_id}`);
             }
-            validCheckOut = outDate.toISOString();
           }
 
           if (validCheckIn && validCheckOut) {

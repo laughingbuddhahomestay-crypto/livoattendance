@@ -110,14 +110,22 @@ export default function AuditPage() {
     }
 
     if (prev.check_in !== current.check_in) {
-      const fIn = prev.check_in ? new Date(prev.check_in).toLocaleTimeString('en-IN') : 'None';
-      const tIn = current.check_in ? new Date(current.check_in).toLocaleTimeString('en-IN') : 'None';
+      const fIn = prev.check_in
+        ? new Date(prev.check_in).toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit' })
+        : 'None';
+      const tIn = current.check_in
+        ? new Date(current.check_in).toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit' })
+        : 'None';
       changes.push(`Check-In: ${fIn} → ${tIn}`);
     }
 
     if (prev.check_out !== current.check_out) {
-      const fOut = prev.check_out ? new Date(prev.check_out).toLocaleTimeString('en-IN') : 'None';
-      const tOut = current.check_out ? new Date(current.check_out).toLocaleTimeString('en-IN') : 'None';
+      const fOut = prev.check_out
+        ? new Date(prev.check_out).toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit' })
+        : 'None';
+      const tOut = current.check_out
+        ? new Date(current.check_out).toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit' })
+        : 'None';
       changes.push(`Check-Out: ${fOut} → ${tOut}`);
     }
 
@@ -203,6 +211,7 @@ export default function AuditPage() {
                   <tr key={e.id}>
                     <td style={{ fontSize: '0.8rem', whiteSpace: 'nowrap' }}>
                       {new Date(e.changed_at).toLocaleString('en-IN', {
+                        timeZone: 'Asia/Kolkata',
                         year: 'numeric',
                         month: 'short',
                         day: 'numeric',
