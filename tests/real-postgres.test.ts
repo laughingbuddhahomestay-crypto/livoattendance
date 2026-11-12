@@ -756,5 +756,63 @@ describe('Real PostgreSQL Integration & Concurrency Tests (PGlite Engine v16.4)'
       expect(auditRes.rows[1].changed_by_name).toBe('Hotel Manager');
       expect(auditRes.rows[1].changed_by_role).toBe('manager');
     });
+
+    it('allows owner to add and delete staff with full cascade cleanup', async () => {
+      // 1. Run Migration 0003
+      const mig3 = fs.readFileSync(
+        path.join(process.cwd(), 'netlify/database/migrations/0003_owner_and_manager_accounts/migration.sql'),
+        'utf8'
+      );
+      await db.exec(mig3);
+
+      const ownerRes = await db.query<{ id: string }>(
+        `SELECT id FROM users WHERE email = 'pkray2012@gmail.com'`
+      );
+      const ownerId = ownerRes.rows[0].id;
+
+      // 2. Add staff member
+      const staffId = crypto.randomUUID();
+      await db.query(
+        `INSERT INTO staff (id, employee_id, full_name, designation, department, joining_date, is_active, created_by, updated_by)
+         VALUES ($1, 'EMP100', 'Amit Patel', 'Chef', 'Kitchen', '2026-02-01', true, $2, $2)`,
+        [staffId, ownerId]
+      );
+
+      // Verify staff added
+      const staffCheck = await db.query(`SELECT id FROM staff WHERE id = $1`, [staffId]);
+      expect(staffCheck.rows.length).toBe(1);
+
+      // 3. Add attendance and audit records for this staff
+      const attId = crypto.randomUUID();
+      await db.query(
+        `INSERT INTO attendance (id, staff_id, attendance_date, status, created_by, updated_by)
+         VALUES ($1, $2, '2026-11-13'::date, 'present', $3, $3)`,
+        [attId, staffId, ownerId]
+      );
+
+      await db.query(
+        `INSERT INTO attendance_audit (attendance_id, staff_id, attendance_date, new_values, changed_by)
+         VALUES ($1, $2, '2026-11-13'::date, '{"status":"present"}', $3)`,
+        [attId, staffId, ownerId]
+      );
+
+      // 4. Delete staff in atomic cascade transaction
+      await db.exec('BEGIN');
+      await db.query('DELETE FROM notification_outbox WHERE staff_id = $1', [staffId]);
+      await db.query('DELETE FROM attendance_audit WHERE staff_id = $1', [staffId]);
+      await db.query('DELETE FROM attendance WHERE staff_id = $1', [staffId]);
+      await db.query('DELETE FROM staff WHERE id = $1', [staffId]);
+      await db.exec('COMMIT');
+
+      // Verify staff, attendance, and audit records are completely deleted
+      const staffAfter = await db.query(`SELECT id FROM staff WHERE id = $1`, [staffId]);
+      expect(staffAfter.rows.length).toBe(0);
+
+      const attAfter = await db.query(`SELECT id FROM attendance WHERE staff_id = $1`, [staffId]);
+      expect(attAfter.rows.length).toBe(0);
+
+      const auditAfter = await db.query(`SELECT id FROM attendance_audit WHERE staff_id = $1`, [staffId]);
+      expect(auditAfter.rows.length).toBe(0);
+    });
   });
 });

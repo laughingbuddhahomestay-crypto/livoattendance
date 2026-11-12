@@ -5,6 +5,7 @@ import { DEPARTMENTS } from '../types';
 import { useAuth } from '../auth/AuthContext';
 import LoadingSpinner from '../components/LoadingSpinner';
 import ErrorBanner from '../components/ErrorBanner';
+import ConfirmDialog from '../components/ConfirmDialog';
 
 interface StaffFormData {
   employee_id: string;
@@ -48,6 +49,8 @@ export default function StaffFormPage() {
   const [form, setForm] = useState<StaffFormData>(emptyForm);
   const [loading, setLoading] = useState(isEdit);
   const [submitting, setSubmitting] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const [error, setError] = useState('');
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
 
@@ -142,6 +145,21 @@ export default function StaffFormPage() {
       setError(err.message || 'Failed to save staff');
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!id) return;
+    setDeleting(true);
+    setError('');
+    try {
+      await api.deleteStaff(id);
+      navigate('/staff');
+    } catch (err: any) {
+      setError(err.message || 'Failed to delete staff member');
+    } finally {
+      setDeleting(false);
+      setConfirmDelete(false);
     }
   };
 
@@ -356,22 +374,47 @@ export default function StaffFormPage() {
             )}
 
             {/* Actions */}
-            <div style={{ display: 'flex', gap: '0.75rem', marginTop: '0.5rem' }}>
-              <button type="submit" className="btn btn-primary" disabled={submitting}>
-                {submitting ? 'Saving…' : isEdit ? 'Update Staff' : 'Add Staff'}
-              </button>
-              <button
-                type="button"
-                className="btn btn-secondary"
-                onClick={() => navigate('/staff')}
-                disabled={submitting}
-              >
-                Cancel
-              </button>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem', marginTop: '0.5rem' }}>
+              <div style={{ display: 'flex', gap: '0.75rem' }}>
+                <button type="submit" className="btn btn-primary" disabled={submitting || deleting}>
+                  {submitting ? 'Saving…' : isEdit ? 'Update Staff' : 'Add Staff'}
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={() => navigate('/staff')}
+                  disabled={submitting || deleting}
+                >
+                  Cancel
+                </button>
+              </div>
+
+              {isEdit && isOwner && (
+                <button
+                  type="button"
+                  className="btn btn-outline"
+                  style={{ borderColor: '#ef4444', color: '#dc2626' }}
+                  onClick={() => setConfirmDelete(true)}
+                  disabled={submitting || deleting}
+                >
+                  {deleting ? 'Deleting…' : 'Delete Staff Member'}
+                </button>
+              )}
             </div>
           </div>
         </form>
       </div>
+
+      {confirmDelete && (
+        <ConfirmDialog
+          title="Delete Staff Member"
+          message={`Are you sure you want to permanently delete ${form.name} (${form.employee_id})? All associated records, past attendance logs, and notification history for this employee will be deleted. This action cannot be undone.`}
+          confirmLabel={deleting ? 'Deleting…' : 'Delete Staff'}
+          variant="danger"
+          onConfirm={handleDelete}
+          onCancel={() => setConfirmDelete(false)}
+        />
+      )}
     </div>
   );
 }

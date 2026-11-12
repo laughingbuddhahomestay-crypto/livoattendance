@@ -157,6 +157,14 @@ export const api = {
       body: JSON.stringify(payload),
     }),
 
+  deleteStaff: (id: string) =>
+    request<{ success: boolean; message: string; id: string }>(
+      `/api/staff?id=${encodeURIComponent(id)}`,
+      {
+        method: 'DELETE',
+      },
+    ),
+
   // Attendance
   getAttendance: (date: string) =>
     request<{ records: Record<string, unknown>[]; staff: Record<string, unknown>[] }>(

@@ -261,6 +261,49 @@ export default async (req: Request, context: Context) => {
       }
     }
 
+    if (req.method === 'DELETE') {
+      const id = url.searchParams.get('id');
+      if (!id) {
+        return errorResponse('Staff ID is required in query params');
+      }
+
+      const client = await db.pool.connect();
+      try {
+        await client.query('BEGIN');
+
+        // Check if staff exists
+        const checkRes = await client.query(
+          'SELECT id, full_name, employee_id FROM staff WHERE id = $1 FOR UPDATE',
+          [id]
+        );
+        if (checkRes.rows.length === 0) {
+          await client.query('ROLLBACK');
+          return errorResponse('Staff member not found', 404);
+        }
+
+        const staffName = checkRes.rows[0].full_name;
+        const empId = checkRes.rows[0].employee_id;
+
+        // Atomically delete related notifications, audit records, attendance, and staff
+        await client.query('DELETE FROM notification_outbox WHERE staff_id = $1', [id]);
+        await client.query('DELETE FROM attendance_audit WHERE staff_id = $1', [id]);
+        await client.query('DELETE FROM attendance WHERE staff_id = $1', [id]);
+        await client.query('DELETE FROM staff WHERE id = $1', [id]);
+
+        await client.query('COMMIT');
+        return jsonResponse({
+          success: true,
+          message: `Staff member ${staffName} (${empId}) deleted successfully`,
+          id,
+        });
+      } catch (txErr) {
+        await client.query('ROLLBACK');
+        throw txErr;
+      } finally {
+        client.release();
+      }
+    }
+
     return errorResponse('Method not allowed', 405);
   } catch (err: any) {
     console.error('staff function error:', err);
@@ -276,5 +319,5 @@ export default async (req: Request, context: Context) => {
 
 export const config: Config = {
   path: '/api/staff',
-  method: ['GET', 'POST', 'PUT'],
+  method: ['GET', 'POST', 'PUT', 'DELETE'],
 };

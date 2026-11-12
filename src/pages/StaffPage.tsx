@@ -1,18 +1,26 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../api/client';
+import { useAuth } from '../auth/AuthContext';
 import { type Staff, DEPARTMENTS } from '../types';
 import LoadingSpinner from '../components/LoadingSpinner';
 import ErrorBanner from '../components/ErrorBanner';
+import ConfirmDialog from '../components/ConfirmDialog';
 
 export default function StaffPage() {
   const navigate = useNavigate();
+  const { user } = useAuth();
+  const isOwner = user?.role === 'owner';
+
   const [staff, setStaff] = useState<Staff[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [successMsg, setSuccessMsg] = useState('');
   const [search, setSearch] = useState('');
   const [deptFilter, setDeptFilter] = useState('all');
   const [showInactive, setShowInactive] = useState(false);
+  const [staffToDelete, setStaffToDelete] = useState<Staff | null>(null);
+  const [deleteLoading, setDeleteLoading] = useState(false);
 
   const fetchStaff = useCallback(async () => {
     setLoading(true);
@@ -30,6 +38,23 @@ export default function StaffPage() {
   useEffect(() => {
     fetchStaff();
   }, [fetchStaff]);
+
+  const handleDeleteStaff = async () => {
+    if (!staffToDelete) return;
+    setDeleteLoading(true);
+    setError('');
+    try {
+      await api.deleteStaff(staffToDelete.id);
+      setSuccessMsg(`Staff member ${staffToDelete.full_name || staffToDelete.name} (${staffToDelete.employee_id}) was deleted successfully.`);
+      setTimeout(() => setSuccessMsg(''), 4000);
+      setStaffToDelete(null);
+      await fetchStaff();
+    } catch (err: any) {
+      setError(err.message || 'Failed to delete staff member');
+    } finally {
+      setDeleteLoading(false);
+    }
+  };
 
   const filtered = useMemo(() => {
     return staff.filter((s) => {
@@ -57,12 +82,15 @@ export default function StaffPage() {
             <h1 className="page-title">Staff Management</h1>
             <p className="page-subtitle">Manage hotel employees and email notification preferences</p>
           </div>
-          <button className="btn btn-primary" onClick={() => navigate('/staff/new')}>
-            + Add Staff
-          </button>
+          {isOwner && (
+            <button className="btn btn-primary" onClick={() => navigate('/staff/new')}>
+              + Add Staff
+            </button>
+          )}
         </div>
       </div>
 
+      {successMsg && <div className="alert alert-success">{successMsg}</div>}
       {error && <ErrorBanner message={error} onRetry={fetchStaff} />}
 
       <div className="toolbar" style={{ flexWrap: 'wrap', gap: '0.5rem' }}>
@@ -178,13 +206,30 @@ export default function StaffPage() {
                       </span>
                     </td>
                     <td>
-                      <button
-                        className="btn btn-secondary"
-                        onClick={() => navigate(`/staff/${s.id}/edit`)}
-                        style={{ fontSize: '0.85rem', padding: '0.25rem 0.75rem' }}
-                      >
-                        Edit
-                      </button>
+                      <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center' }}>
+                        <button
+                          className="btn btn-secondary btn-sm"
+                          onClick={() => navigate(`/staff/${s.id}/edit`)}
+                          style={{ fontSize: '0.85rem', padding: '0.25rem 0.75rem' }}
+                        >
+                          Edit
+                        </button>
+                        {isOwner && (
+                          <button
+                            className="btn btn-outline btn-sm"
+                            style={{
+                              borderColor: '#ef4444',
+                              color: '#dc2626',
+                              fontSize: '0.85rem',
+                              padding: '0.25rem 0.75rem',
+                            }}
+                            onClick={() => setStaffToDelete(s)}
+                            title="Delete staff member"
+                          >
+                            Delete
+                          </button>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -198,8 +243,7 @@ export default function StaffPage() {
               <div
                 key={s.id}
                 className="card"
-                style={{ padding: '1rem', cursor: 'pointer' }}
-                onClick={() => navigate(`/staff/${s.id}/edit`)}
+                style={{ padding: '1rem' }}
               >
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.5rem' }}>
                   <div>
@@ -240,9 +284,39 @@ export default function StaffPage() {
                     </div>
                   </div>
                 )}
+
+                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem', marginTop: '0.75rem', paddingTop: '0.5rem', borderTop: '1px solid #f1f5f9' }}>
+                  <button
+                    className="btn btn-secondary btn-sm"
+                    onClick={() => navigate(`/staff/${s.id}/edit`)}
+                  >
+                    Edit
+                  </button>
+                  {isOwner && (
+                    <button
+                      className="btn btn-outline btn-sm"
+                      style={{ borderColor: '#ef4444', color: '#dc2626' }}
+                      onClick={() => setStaffToDelete(s)}
+                    >
+                      Delete
+                    </button>
+                  )}
+                </div>
               </div>
             ))}
           </div>
+
+          {/* Delete confirmation dialog */}
+          {staffToDelete && (
+            <ConfirmDialog
+              title="Delete Staff Member"
+              message={`Are you sure you want to permanently delete ${staffToDelete.full_name || staffToDelete.name} (${staffToDelete.employee_id})? All associated records, past attendance logs, and notification history for this employee will be deleted. This action cannot be undone.`}
+              confirmLabel={deleteLoading ? 'Deleting…' : 'Delete Staff'}
+              variant="danger"
+              onConfirm={handleDeleteStaff}
+              onCancel={() => setStaffToDelete(null)}
+            />
+          )}
         </>
       )}
     </div>
