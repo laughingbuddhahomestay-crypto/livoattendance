@@ -97,10 +97,18 @@ export interface AttendanceRecord {
   version: number;
   created_at: string;
   updated_at: string;
-  // Joined fields from staff table
+  created_by?: string;
+  updated_by?: string;
+  // Joined fields from staff and users tables
   staff_name?: string;
   employee_id?: string;
   department?: string;
+  created_by_name?: string;
+  created_by_email?: string;
+  created_by_role?: string;
+  updated_by_name?: string;
+  updated_by_email?: string;
+  updated_by_role?: string;
 }
 
 export interface AuditEntry {
@@ -113,9 +121,12 @@ export interface AuditEntry {
   change_reason: string | null;
   changed_by: string;
   changed_by_name?: string;
+  changed_by_email?: string;
+  changed_by_role?: string;
   changed_at: string;
   staff_name?: string;
   employee_id?: string;
+  department?: string;
 }
 
 export interface MonthLock {

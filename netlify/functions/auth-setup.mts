@@ -1,6 +1,6 @@
 import type { Config, Context } from '@netlify/functions';
 import { getDatabase } from '@netlify/database';
-import { hashPassword, generateToken, jsonResponse, errorResponse } from './_shared/auth-utils.mts';
+import { hashPassword, generateToken, jsonResponse, errorResponse, ensureDefaultAccounts } from './_shared/auth-utils.mts';
 import crypto from 'node:crypto';
 
 export default async (req: Request, context: Context) => {
@@ -8,6 +8,7 @@ export default async (req: Request, context: Context) => {
     const db = getDatabase();
 
     if (req.method === 'GET') {
+      await ensureDefaultAccounts(db);
       const result = await db.sql`SELECT COUNT(*) as count FROM users`;
       const count = parseInt((result[0] as any).count, 10);
       return jsonResponse({

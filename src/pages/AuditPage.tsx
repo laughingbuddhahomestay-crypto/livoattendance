@@ -1,10 +1,15 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { api } from '../api/client';
 import { STATUS_LABELS, type AttendanceStatus } from '../types';
 import LoadingSpinner from '../components/LoadingSpinner';
 import ErrorBanner from '../components/ErrorBanner';
 
 export default function AuditPage() {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const initialStaffId = searchParams.get('staff_id') || '';
+  const initialDate = searchParams.get('date') || '';
+
   const [entries, setEntries] = useState<any[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
@@ -13,8 +18,43 @@ export default function AuditPage() {
 
   // Filters
   const [staffList, setStaffList] = useState<any[]>([]);
-  const [selectedStaffId, setSelectedStaffId] = useState('');
-  const [selectedDate, setSelectedDate] = useState('');
+  const [selectedStaffId, setSelectedStaffId] = useState(initialStaffId);
+  const [selectedDate, setSelectedDate] = useState(initialDate);
+
+  // Sync state with URL params
+  const updateStaffFilter = (id: string) => {
+    setSelectedStaffId(id);
+    setPage(1);
+    setSearchParams(prev => {
+      const next = new URLSearchParams(prev);
+      if (id) next.set('staff_id', id);
+      else next.delete('staff_id');
+      return next;
+    });
+  };
+
+  const updateDateFilter = (d: string) => {
+    setSelectedDate(d);
+    setPage(1);
+    setSearchParams(prev => {
+      const next = new URLSearchParams(prev);
+      if (d) next.set('date', d);
+      else next.delete('date');
+      return next;
+    });
+  };
+
+  const clearFilters = () => {
+    setSelectedStaffId('');
+    setSelectedDate('');
+    setPage(1);
+    setSearchParams(prev => {
+      const next = new URLSearchParams(prev);
+      next.delete('staff_id');
+      next.delete('date');
+      return next;
+    });
+  };
 
   // Fetch staff for dropdown
   useEffect(() => {
@@ -109,10 +149,7 @@ export default function AuditPage() {
       <div className="toolbar">
         <select
           value={selectedStaffId}
-          onChange={e => {
-            setSelectedStaffId(e.target.value);
-            setPage(1);
-          }}
+          onChange={e => updateStaffFilter(e.target.value)}
           style={{ minWidth: '220px' }}
         >
           <option value="">All Staff Members</option>
@@ -126,21 +163,14 @@ export default function AuditPage() {
         <input
           type="date"
           value={selectedDate}
-          onChange={e => {
-            setSelectedDate(e.target.value);
-            setPage(1);
-          }}
+          onChange={e => updateDateFilter(e.target.value)}
           style={{ width: '170px' }}
         />
 
         {(selectedStaffId || selectedDate) && (
           <button
             className="btn btn-sm btn-ghost"
-            onClick={() => {
-              setSelectedStaffId('');
-              setSelectedDate('');
-              setPage(1);
-            }}
+            onClick={clearFilters}
           >
             Clear Filters
           </button>
@@ -198,7 +228,15 @@ export default function AuditPage() {
                       )}
                     </td>
                     <td style={{ fontSize: '0.85rem' }}>
-                      <strong>{e.changed_by_name}</strong>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', flexWrap: 'wrap' }}>
+                        <strong>{e.changed_by_name}</strong>
+                        <span
+                          className={`badge badge-${e.changed_by_role === 'owner' ? 'owner' : 'manager'}`}
+                          style={{ fontSize: '0.65rem', padding: '1px 5px', textTransform: 'uppercase' }}
+                        >
+                          {e.changed_by_role || 'MANAGER'}
+                        </span>
+                      </div>
                       <div style={{ fontSize: '0.7rem', color: 'var(--gray-500)' }}>
                         {e.changed_by_email}
                       </div>

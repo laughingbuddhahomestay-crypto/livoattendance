@@ -1,9 +1,11 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
 import { api, ApiResponseError } from '../api/client';
 import { useAuth } from '../auth/AuthContext';
 import { useUnsavedChanges } from '../hooks/useUnsavedChanges';
 import {
   type AttendanceStatus,
+  type AttendanceRecord,
   type Staff,
   STATUS_LABELS,
   ALL_STATUSES,
@@ -14,18 +16,6 @@ import LoadingSpinner from '../components/LoadingSpinner';
 import ErrorBanner from '../components/ErrorBanner';
 import StatusBadge from '../components/StatusBadge';
 import ConfirmDialog from '../components/ConfirmDialog';
-
-interface AttendanceRecord {
-  id?: string;
-  staff_id: string;
-  attendance_date: string;
-  status: AttendanceStatus;
-  shift?: string | null;
-  check_in?: string | null;
-  check_out?: string | null;
-  notes?: string | null;
-  version?: number;
-}
 
 interface EditedEntry {
   staff_id: string;
@@ -40,7 +30,11 @@ interface EditedEntry {
 
 export default function AttendancePage() {
   const { user } = useAuth();
-  const [date, setDate] = useState(todayIST());
+  const [searchParams, setSearchParams] = useSearchParams();
+  const initialDate = searchParams.get('date') || todayIST();
+  const initialFilter = searchParams.get('filter') || 'all';
+
+  const [date, setDate] = useState(initialDate);
   const [staffList, setStaffList] = useState<Staff[]>([]);
   const [originalRecords, setOriginalRecords] = useState<Map<string, AttendanceRecord>>(new Map());
   const [editedEntries, setEditedEntries] = useState<Map<string, EditedEntry>>(new Map());
@@ -53,7 +47,7 @@ export default function AttendancePage() {
     conflicts: Array<{ staff_id: string; current_version: number; staff_name?: string }>;
   } | null>(null);
   const [search, setSearch] = useState('');
-  const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [statusFilter, setStatusFilter] = useState<string>(initialFilter);
   const [expandedNotes, setExpandedNotes] = useState<Set<string>>(new Set());
   const [monthLocked, setMonthLocked] = useState(false);
   const [reasonDialog, setReasonDialog] = useState<{
@@ -113,6 +107,34 @@ export default function AttendancePage() {
     });
   }, [staffList]);
 
+  // Attendance vs Non-attendance counts
+  const counts = useMemo(() => {
+    let total = sortedStaff.length;
+    let attendance = 0;
+    let nonAttendance = 0;
+    let absent = 0;
+    let notMarked = 0;
+
+    for (const s of sortedStaff) {
+      const entry = editedEntries.get(s.id);
+      const original = originalRecords.get(s.id);
+      const currentStatus = entry?.status !== undefined ? entry.status : original?.status;
+
+      if (!currentStatus) {
+        notMarked++;
+        nonAttendance++;
+      } else if (currentStatus === 'absent' || currentStatus === 'unpaid_leave') {
+        if (currentStatus === 'absent') absent++;
+        nonAttendance++;
+      } else {
+        // present, half_day, paid_leave, weekly_off
+        attendance++;
+      }
+    }
+
+    return { total, attendance, nonAttendance, absent, notMarked };
+  }, [sortedStaff, editedEntries, originalRecords]);
+
   const filteredStaff = useMemo(() => {
     return sortedStaff.filter(s => {
       const staffName = s.full_name || s.name || '';
@@ -126,7 +148,18 @@ export default function AttendancePage() {
         const entry = editedEntries.get(s.id);
         const original = originalRecords.get(s.id);
         const currentStatus = entry?.status !== undefined ? entry.status : original?.status;
-        if (statusFilter === 'not_marked') {
+
+        if (statusFilter === 'attendance') {
+          // Attendance includes Present, Half Day, Paid Leave, Weekly Off
+          if (!currentStatus || (currentStatus !== 'present' && currentStatus !== 'half_day' && currentStatus !== 'paid_leave' && currentStatus !== 'weekly_off')) {
+            return false;
+          }
+        } else if (statusFilter === 'non_attendance') {
+          // Non-attendance includes Absent, Unpaid Leave, or Not Marked
+          if (currentStatus && currentStatus !== 'absent' && currentStatus !== 'unpaid_leave') {
+            return false;
+          }
+        } else if (statusFilter === 'not_marked') {
           if (currentStatus) return false;
         } else {
           if (currentStatus !== statusFilter) return false;
@@ -401,6 +434,56 @@ export default function AttendancePage() {
         </div>
       )}
 
+      {/* Quick summary and filter pills */}
+      <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginBottom: '0.75rem', alignItems: 'center' }}>
+        <button
+          type="button"
+          className={`btn btn-sm ${statusFilter === 'all' ? 'btn-primary' : 'btn-outline'}`}
+          onClick={() => setStatusFilter('all')}
+        >
+          All Staff ({counts.total})
+        </button>
+        <button
+          type="button"
+          className={`btn btn-sm ${statusFilter === 'attendance' ? 'btn-primary' : 'btn-outline'}`}
+          style={statusFilter === 'attendance' ? { background: '#2e7d32', borderColor: '#2e7d32', color: '#fff' } : { borderColor: '#2e7d32', color: '#2e7d32' }}
+          onClick={() => setStatusFilter('attendance')}
+        >
+          ✓ Attendance ({counts.attendance})
+        </button>
+        <button
+          type="button"
+          className={`btn btn-sm ${statusFilter === 'non_attendance' ? 'btn-primary' : 'btn-outline'}`}
+          style={statusFilter === 'non_attendance' ? { background: '#c62828', borderColor: '#c62828', color: '#fff' } : { borderColor: '#c62828', color: '#c62828' }}
+          onClick={() => setStatusFilter('non_attendance')}
+        >
+          ✕ Non-Attendance ({counts.nonAttendance})
+        </button>
+        <button
+          type="button"
+          className={`btn btn-sm ${statusFilter === 'absent' ? 'btn-primary' : 'btn-outline'}`}
+          onClick={() => setStatusFilter('absent')}
+        >
+          Absent ({counts.absent})
+        </button>
+        <button
+          type="button"
+          className={`btn btn-sm ${statusFilter === 'not_marked' ? 'btn-primary' : 'btn-outline'}`}
+          onClick={() => setStatusFilter('not_marked')}
+        >
+          Not Marked ({counts.notMarked})
+        </button>
+        {user?.role === 'owner' && (
+          <Link
+            to={`/audit?date=${date}`}
+            className="btn btn-sm btn-ghost"
+            style={{ marginLeft: 'auto', textDecoration: 'none', color: 'var(--primary)', fontWeight: 600 }}
+          >
+            📋 View Day's Audit Trail ↗
+          </Link>
+        )}
+      </div>
+
       <div className="toolbar">
         <input
           type="date"
@@ -419,15 +502,18 @@ export default function AttendancePage() {
         <select
           value={statusFilter}
           onChange={e => setStatusFilter(e.target.value)}
-          style={{ maxWidth: '180px' }}
+          style={{ maxWidth: '220px' }}
         >
-          <option value="all">All Statuses</option>
-          {ALL_STATUSES.map(s => (
-            <option key={s} value={s}>
-              {STATUS_LABELS[s]}
-            </option>
-          ))}
-          <option value="not_marked">Not Marked</option>
+          <option value="all">All Staff ({counts.total})</option>
+          <option value="attendance">✓ Attendance ({counts.attendance})</option>
+          <option value="non_attendance">✕ Non-Attendance ({counts.nonAttendance})</option>
+          <option value="present">Present</option>
+          <option value="absent">Absent ({counts.absent})</option>
+          <option value="half_day">Half Day</option>
+          <option value="weekly_off">Weekly Off</option>
+          <option value="paid_leave">Paid Leave</option>
+          <option value="unpaid_leave">Unpaid Leave</option>
+          <option value="not_marked">Not Marked ({counts.notMarked})</option>
         </select>
         {isEditable && (
           <button className="btn btn-outline" onClick={markAllPresent}>
@@ -455,6 +541,7 @@ export default function AttendancePage() {
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', paddingBottom: hasChanges ? '5rem' : '1rem' }}>
           {filteredStaff.map(staff => {
+            const original = originalRecords.get(staff.id);
             const isModified = editedEntries.has(staff.id);
             const currentStatus = getFieldValue(staff.id, 'status') as AttendanceStatus | '';
             const shift = (getFieldValue(staff.id, 'shift') as string) || '';
@@ -576,6 +663,78 @@ export default function AttendancePage() {
                     />
                   )}
                 </div>
+
+                {/* Manager attribution & audit trail link */}
+                {original && (original.created_by_name || original.updated_by_name) ? (
+                  <div
+                    style={{
+                      marginTop: '0.6rem',
+                      padding: '0.4rem 0.65rem',
+                      background: '#f8fafc',
+                      border: '1px solid #e2e8f0',
+                      borderRadius: '6px',
+                      fontSize: '0.75rem',
+                      color: '#475569',
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      flexWrap: 'wrap',
+                      gap: '0.4rem',
+                    }}
+                  >
+                    <div>
+                      {original.updated_by_name ? (
+                        <span>
+                          ✏️ Last updated by <strong>{original.updated_by_name}</strong>{' '}
+                          <span
+                            className={`badge badge-${original.updated_by_role === 'owner' ? 'owner' : 'manager'}`}
+                            style={{ fontSize: '0.65rem', padding: '1px 5px', textTransform: 'uppercase' }}
+                          >
+                            {original.updated_by_role || 'MANAGER'}
+                          </span>
+                          {original.updated_at &&
+                            ` at ${new Date(original.updated_at).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}`}
+                        </span>
+                      ) : (
+                        <span>
+                          📝 Marked by <strong>{original.created_by_name}</strong>{' '}
+                          <span
+                            className={`badge badge-${original.created_by_role === 'owner' ? 'owner' : 'manager'}`}
+                            style={{ fontSize: '0.65rem', padding: '1px 5px', textTransform: 'uppercase' }}
+                          >
+                            {original.created_by_role || 'MANAGER'}
+                          </span>
+                          {original.created_at &&
+                            ` at ${new Date(original.created_at).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}`}
+                        </span>
+                      )}
+                    </div>
+                    {user?.role === 'owner' && (
+                      <Link
+                        to={`/audit?staff_id=${staff.id}&date=${date}`}
+                        style={{
+                          fontSize: '0.75rem',
+                          color: 'var(--primary)',
+                          fontWeight: 600,
+                          textDecoration: 'none',
+                        }}
+                      >
+                        Audit Trail ↗
+                      </Link>
+                    )}
+                  </div>
+                ) : (
+                  <div
+                    style={{
+                      marginTop: '0.4rem',
+                      fontSize: '0.72rem',
+                      color: '#94a3b8',
+                      fontStyle: 'italic',
+                    }}
+                  >
+                    Not yet marked by manager
+                  </div>
+                )}
               </div>
             );
           })}

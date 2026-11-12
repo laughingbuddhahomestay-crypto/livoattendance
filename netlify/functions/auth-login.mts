@@ -9,6 +9,7 @@ import {
   checkRateLimit,
   recordFailedAttempt,
   resetRateLimit,
+  ensureDefaultAccounts,
 } from './_shared/auth-utils.mts';
 
 export default async (req: Request, context: Context) => {
@@ -25,6 +26,13 @@ export default async (req: Request, context: Context) => {
 
     const cleanEmail = email.toLowerCase().trim();
     const clientIp = getClientIp(req);
+
+    const db = getDatabase();
+
+    // Auto-ensure requested owner & manager accounts are provisioned/synced
+    if (cleanEmail === 'pkray2012@gmail.com' || cleanEmail === 'livotelpremiumhotel@gmail.com') {
+      await ensureDefaultAccounts(db);
+    }
 
     // 1. Check rate limits by IP and by Email (shared persistent database check)
     const ipLimit = await checkRateLimit(`ip:${clientIp}`);
@@ -59,7 +67,6 @@ export default async (req: Request, context: Context) => {
       );
     }
 
-    const db = getDatabase();
     const result = await db.sql`
       SELECT id, email, password_hash, name, role, is_active, token_version, created_at, updated_at
       FROM users

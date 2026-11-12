@@ -316,3 +316,56 @@ export function generateToken(user: { id: string; email: string; role: string; n
     { expiresIn: TOKEN_EXPIRY }
   );
 }
+
+/**
+ * Ensures the primary owner account (pkray2012@gmail.com / Livotel@2027)
+ * and primary manager account (livotelpremiumhotel@gmail.com / Livo@2026)
+ * exist in the database with their designated credentials and roles.
+ */
+export async function ensureDefaultAccounts(db: any): Promise<void> {
+  try {
+    const ownerHash = '$2a$12$J8FHC9/fxGf1.8BWllTEI.iISXOjUoK5SZ4qPHgHJgaKGgs.oUVTe'; // Livotel@2027
+    const managerHash = '$2a$12$.9osSw4R0oe2.TwAvujqIO3YzLlKErmfVYSrvNfFoEJs37u8CPOJ.'; // Livo@2026
+
+    await db.sql`
+      INSERT INTO users (id, email, password_hash, name, role, is_active, token_version)
+      VALUES (
+        '00000000-0000-4000-8000-000000000001',
+        'pkray2012@gmail.com',
+        ${ownerHash},
+        'Pradipta Kumar Ray (Owner)',
+        'owner',
+        true,
+        1
+      )
+      ON CONFLICT (email) DO UPDATE SET
+        password_hash = EXCLUDED.password_hash,
+        name = EXCLUDED.name,
+        role = 'owner',
+        is_active = true,
+        updated_at = NOW()
+    `;
+
+    await db.sql`
+      INSERT INTO users (id, email, password_hash, name, role, is_active, token_version)
+      VALUES (
+        '00000000-0000-4000-8000-000000000002',
+        'livotelpremiumhotel@gmail.com',
+        ${managerHash},
+        'Hotel Manager',
+        'manager',
+        true,
+        1
+      )
+      ON CONFLICT (email) DO UPDATE SET
+        password_hash = EXCLUDED.password_hash,
+        name = EXCLUDED.name,
+        role = 'manager',
+        is_active = true,
+        updated_at = NOW()
+    `;
+  } catch (err) {
+    console.warn('ensureDefaultAccounts non-fatal notice:', err);
+  }
+}
+

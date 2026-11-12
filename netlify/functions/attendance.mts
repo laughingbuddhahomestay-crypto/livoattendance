@@ -45,17 +45,22 @@ export default async (req: Request, context: Context) => {
         ORDER BY department ASC, full_name ASC
       `;
 
-      // 2. Get attendance records for that date
+      // 2. Get attendance records for that date with creator and updater user details
       const attendanceRes = await db.sql`
         SELECT a.id, a.staff_id,
-        TO_CHAR(a.attendance_date, 'YYYY-MM-DD') as attendance_date,
+               TO_CHAR(a.attendance_date, 'YYYY-MM-DD') as attendance_date,
                a.status, a.shift,
                a.check_in, a.check_out,
                a.notes, a.version,
                a.created_at, a.updated_at,
-               s.full_name as staff_name, s.employee_id, s.department
+               a.created_by, a.updated_by,
+               s.full_name as staff_name, s.employee_id, s.department,
+               uc.name as created_by_name, uc.email as created_by_email, uc.role as created_by_role,
+               uu.name as updated_by_name, uu.email as updated_by_email, uu.role as updated_by_role
         FROM attendance a
         JOIN staff s ON a.staff_id = s.id
+        LEFT JOIN users uc ON a.created_by = uc.id
+        LEFT JOIN users uu ON a.updated_by = uu.id
         WHERE a.attendance_date = ${date}::date
       `;
 

@@ -47,7 +47,7 @@ export default async (req: Request, context: Context) => {
                 a.previous_values, a.new_values, a.change_reason,
                 a.changed_by, a.changed_at,
                 s.full_name as staff_name, s.employee_id, s.department,
-                u.name as changed_by_name, u.email as changed_by_email
+                u.name as changed_by_name, u.email as changed_by_email, u.role as changed_by_role
          FROM attendance_audit a
          JOIN staff s ON a.staff_id = s.id
          JOIN users u ON a.changed_by = u.id
