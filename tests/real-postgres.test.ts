@@ -3,6 +3,7 @@ import { PGlite } from '@electric-sql/pglite';
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
+import bcrypt from 'bcryptjs';
 import { verifyWebhookSignature } from '../netlify/functions/notifications-webhook.mts';
 
 describe('Real PostgreSQL Integration & Concurrency Tests (PGlite Engine v16.4)', () => {
@@ -639,6 +640,121 @@ describe('Real PostgreSQL Integration & Concurrency Tests (PGlite Engine v16.4)'
         `SELECT COUNT(*) as count FROM notification_outbox WHERE notification_type = 'monthly_report'`
       );
       expect(parseInt(count2.rows[0].count, 10)).toBe(2); // Still strictly 2
+    });
+  });
+
+  describe('10. Owner & Manager Provisioning and Attribution Tracking (Migration 0003)', () => {
+    it('provisions designated owner and manager accounts and tracks manager attribution across attendance and audit logs', async () => {
+      // 1. Run Migration 0003
+      const mig3 = fs.readFileSync(
+        path.join(process.cwd(), 'netlify/database/migrations/0003_owner_and_manager_accounts/migration.sql'),
+        'utf8'
+      );
+      await db.exec(mig3);
+
+      // 2. Verify Owner account
+      const ownerRes = await db.query<{ id: string; email: string; password_hash: string; role: string; is_active: boolean }>(
+        `SELECT id, email, password_hash, role, is_active FROM users WHERE email = 'pkray2012@gmail.com'`
+      );
+      expect(ownerRes.rows.length).toBe(1);
+      const owner = ownerRes.rows[0];
+      expect(owner.role).toBe('owner');
+      expect(owner.is_active).toBe(true);
+      expect(bcrypt.compareSync('Livotel@2027', owner.password_hash)).toBe(true);
+
+      // 3. Verify Manager account
+      const managerRes = await db.query<{ id: string; email: string; password_hash: string; role: string; is_active: boolean }>(
+        `SELECT id, email, password_hash, role, is_active FROM users WHERE email = 'livotelpremiumhotel@gmail.com'`
+      );
+      expect(managerRes.rows.length).toBe(1);
+      const manager = managerRes.rows[0];
+      expect(manager.role).toBe('manager');
+      expect(manager.is_active).toBe(true);
+      expect(bcrypt.compareSync('Livo@2026', manager.password_hash)).toBe(true);
+
+      // 4. Create a staff member
+      const staffId = crypto.randomUUID();
+      await db.query(
+        `INSERT INTO staff (id, employee_id, full_name, designation, department, joining_date, is_active)
+         VALUES ($1, 'EMP099', 'Ramesh Kumar', 'Receptionist', 'Reception', '2026-01-01', true)`,
+        [staffId]
+      );
+
+      // 5. Manager marks attendance
+      const date = '2026-11-13';
+      const attId = crypto.randomUUID();
+      await db.query(
+        `INSERT INTO attendance (id, staff_id, attendance_date, status, shift, version, created_by, updated_by)
+         VALUES ($1, $2, $3::date, 'present', 'Morning', 1, $4, $4)`,
+        [attId, staffId, date, manager.id]
+      );
+
+      // Initial audit entry
+      await db.query(
+        `INSERT INTO attendance_audit (attendance_id, staff_id, attendance_date, previous_values, new_values, change_reason, changed_by)
+         VALUES ($1, $2, $3::date, NULL, $4, 'Initial entry by manager', $5)`,
+        [attId, staffId, date, JSON.stringify({ status: 'present', shift: 'Morning' }), manager.id]
+      );
+
+      // 6. Query attendance with joined manager info
+      const joinedRes = await db.query<{
+        created_by_name: string;
+        created_by_role: string;
+        updated_by_name: string;
+        updated_by_role: string;
+      }>(
+        `SELECT a.id, uc.name as created_by_name, uc.role as created_by_role,
+                uu.name as updated_by_name, uu.role as updated_by_role
+         FROM attendance a
+         LEFT JOIN users uc ON a.created_by = uc.id
+         LEFT JOIN users uu ON a.updated_by = uu.id
+         WHERE a.id = $1`,
+        [attId]
+      );
+      expect(joinedRes.rows[0].created_by_name).toBe('Hotel Manager');
+      expect(joinedRes.rows[0].created_by_role).toBe('manager');
+      expect(joinedRes.rows[0].updated_by_name).toBe('Hotel Manager');
+
+      // 7. Owner updates attendance (correction with audit reason)
+      await db.query(
+        `UPDATE attendance
+         SET status = 'half_day', version = version + 1, updated_at = NOW(), updated_by = $1
+         WHERE id = $2`,
+        [owner.id, attId]
+      );
+
+      await db.query(
+        `INSERT INTO attendance_audit (attendance_id, staff_id, attendance_date, previous_values, new_values, change_reason, changed_by)
+         VALUES ($1, $2, $3::date, $4, $5, 'Approved half-day request', $6)`,
+        [
+          attId,
+          staffId,
+          date,
+          JSON.stringify({ status: 'present' }),
+          JSON.stringify({ status: 'half_day' }),
+          owner.id,
+        ]
+      );
+
+      // 8. Query audit log with changed_by role
+      const auditRes = await db.query<{
+        changed_by_name: string;
+        changed_by_role: string;
+        change_reason: string;
+      }>(
+        `SELECT a.change_reason, u.name as changed_by_name, u.role as changed_by_role
+         FROM attendance_audit a
+         JOIN users u ON a.changed_by = u.id
+         WHERE a.attendance_id = $1
+         ORDER BY a.changed_at DESC`,
+        [attId]
+      );
+      expect(auditRes.rows.length).toBe(2);
+      expect(auditRes.rows[0].changed_by_name).toBe('Pradipta Kumar Ray (Owner)');
+      expect(auditRes.rows[0].changed_by_role).toBe('owner');
+      expect(auditRes.rows[0].change_reason).toBe('Approved half-day request');
+      expect(auditRes.rows[1].changed_by_name).toBe('Hotel Manager');
+      expect(auditRes.rows[1].changed_by_role).toBe('manager');
     });
   });
 });

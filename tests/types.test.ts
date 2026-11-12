@@ -1,6 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import {
   calculateHours,
+  formatWorkingHours,
+  toDatetimeLocalValue,
+  isSameTime,
   formatDate,
   todayIST,
   daysInMonth,
@@ -84,6 +87,42 @@ describe('Attendance Domain Logic & Helpers', () => {
     it('todayIST returns a valid YYYY-MM-DD string', () => {
       const ist = todayIST();
       expect(ist).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    });
+
+    it('formatWorkingHours returns correct structure for various shift conditions', () => {
+      expect(formatWorkingHours(null, null)).toEqual({
+        hours: null,
+        label: 'Not recorded',
+        status: 'not_recorded',
+      });
+      expect(formatWorkingHours('2026-11-13T10:00:00.000Z', null)).toEqual({
+        hours: null,
+        label: 'Incomplete',
+        status: 'incomplete',
+      });
+      expect(formatWorkingHours('2026-11-13T18:00:00.000Z', '2026-11-13T10:00:00.000Z')).toEqual({
+        hours: null,
+        label: 'Invalid duration',
+        status: 'invalid',
+      });
+      expect(formatWorkingHours('2026-11-13T10:00:00.000Z', '2026-11-13T18:00:00.000Z')).toEqual({
+        hours: 8,
+        label: '8h',
+        status: 'recorded',
+      });
+    });
+
+    it('toDatetimeLocalValue and isSameTime accurately handle timestamp matching', () => {
+      const iso = '2026-11-13T10:30:00.000Z';
+      const localVal = toDatetimeLocalValue(iso);
+      expect(localVal).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/);
+      expect(toDatetimeLocalValue(null)).toBe('');
+      expect(toDatetimeLocalValue('invalid')).toBe('');
+
+      expect(isSameTime(null, null)).toBe(true);
+      expect(isSameTime('2026-11-13T10:00:00.000Z', '2026-11-13T10:00:00.000Z')).toBe(true);
+      expect(isSameTime('2026-11-13T10:00:00.000Z', '2026-11-13T11:00:00.000Z')).toBe(false);
+      expect(isSameTime('2026-11-13T10:00:00.000Z', null)).toBe(false);
     });
   });
 });

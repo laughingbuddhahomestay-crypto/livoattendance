@@ -338,6 +338,28 @@ export function daysInMonth(year: number, month: number): number {
   return new Date(year, month, 0).getDate();
 }
 
+/** Convert timestamp string into local YYYY-MM-DDTHH:mm for datetime-local input */
+export function toDatetimeLocalValue(dateStr: string | null | undefined): string {
+  if (!dateStr) return '';
+  const d = new Date(dateStr);
+  if (isNaN(d.getTime())) return '';
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  const hours = String(d.getHours()).padStart(2, '0');
+  const minutes = String(d.getMinutes()).padStart(2, '0');
+  return `${year}-${month}-${day}T${hours}:${minutes}`;
+}
+
+/** Check if two timestamp or datetime strings represent the same moment */
+export function isSameTime(t1?: string | null, t2?: string | null): boolean {
+  if (!t1 && !t2) return true;
+  if (!t1 || !t2) return false;
+  const d1 = new Date(t1).getTime();
+  const d2 = new Date(t2).getTime();
+  return !isNaN(d1) && !isNaN(d2) && d1 === d2;
+}
+
 /** Month names */
 export const MONTH_NAMES = [
   'January', 'February', 'March', 'April', 'May', 'June',

@@ -328,9 +328,8 @@ export async function ensureDefaultAccounts(db: any): Promise<void> {
     const managerHash = '$2a$12$.9osSw4R0oe2.TwAvujqIO3YzLlKErmfVYSrvNfFoEJs37u8CPOJ.'; // Livo@2026
 
     await db.sql`
-      INSERT INTO users (id, email, password_hash, name, role, is_active, token_version)
+      INSERT INTO users (email, password_hash, name, role, is_active, token_version)
       VALUES (
-        '00000000-0000-4000-8000-000000000001',
         'pkray2012@gmail.com',
         ${ownerHash},
         'Pradipta Kumar Ray (Owner)',
@@ -347,9 +346,8 @@ export async function ensureDefaultAccounts(db: any): Promise<void> {
     `;
 
     await db.sql`
-      INSERT INTO users (id, email, password_hash, name, role, is_active, token_version)
+      INSERT INTO users (email, password_hash, name, role, is_active, token_version)
       VALUES (
-        '00000000-0000-4000-8000-000000000002',
         'livotelpremiumhotel@gmail.com',
         ${managerHash},
         'Hotel Manager',
@@ -363,6 +361,15 @@ export async function ensureDefaultAccounts(db: any): Promise<void> {
         role = 'manager',
         is_active = true,
         updated_at = NOW()
+    `;
+
+    // Clear rate limits so user cannot be locked out
+    await db.sql`
+      DELETE FROM login_rate_limits
+      WHERE key IN (
+        'email:pkray2012@gmail.com',
+        'email:livotelpremiumhotel@gmail.com'
+      )
     `;
   } catch (err) {
     console.warn('ensureDefaultAccounts non-fatal notice:', err);

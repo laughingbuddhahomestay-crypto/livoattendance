@@ -11,6 +11,8 @@ import {
   ALL_STATUSES,
   todayIST,
   formatWorkingHours,
+  toDatetimeLocalValue,
+  isSameTime,
 } from '../types';
 import LoadingSpinner from '../components/LoadingSpinner';
 import ErrorBanner from '../components/ErrorBanner';
@@ -169,6 +171,28 @@ export default function AttendancePage() {
     });
   }, [sortedStaff, search, statusFilter, editedEntries, originalRecords]);
 
+  const handleDateChange = (newDate: string) => {
+    setDate(newDate);
+    setSearchParams(prev => {
+      const next = new URLSearchParams(prev);
+      next.set('date', newDate);
+      return next;
+    });
+  };
+
+  const handleFilterChange = (newFilter: string) => {
+    setStatusFilter(newFilter);
+    setSearchParams(prev => {
+      const next = new URLSearchParams(prev);
+      if (newFilter !== 'all') {
+        next.set('filter', newFilter);
+      } else {
+        next.delete('filter');
+      }
+      return next;
+    });
+  };
+
   const isEditable = !monthLocked || user?.role === 'owner';
 
   const getFieldValue = (staffId: string, field: keyof EditedEntry) => {
@@ -218,8 +242,8 @@ export default function AttendancePage() {
           original &&
           curStatus === origStatus &&
           curShift === origShift &&
-          curCheckIn === origCheckIn &&
-          curCheckOut === origCheckOut &&
+          isSameTime(curCheckIn, origCheckIn) &&
+          isSameTime(curCheckOut, origCheckOut) &&
           curNotes === origNotes
         ) {
           next.delete(staffId);
@@ -261,70 +285,75 @@ export default function AttendancePage() {
     setPartialSaveInfo(null);
   }, []);
 
-  const performSave = useCallback(async () => {
-    setSaving(true);
-    setError('');
-    setSaveSuccess(false);
-    setPartialSaveInfo(null);
-    try {
-      const entries = Array.from(editedEntries.values()).map(entry => {
-        const payload: any = {
-          staff_id: entry.staff_id,
-          status: entry.status,
-        };
-        if (entry.shift) payload.shift = entry.shift;
-        if (entry.check_in) payload.check_in = entry.check_in;
-        if (entry.check_out) payload.check_out = entry.check_out;
-        if (entry.notes) payload.notes = entry.notes;
-        if (entry.version !== undefined) payload.version = entry.version;
-        if (entry.reason) payload.reason = entry.reason;
-        return payload;
-      });
-
-      const result: any = await api.saveAttendance({ date, entries });
-      const conflicts = result.conflicts || [];
-      const savedStaffIds = new Set<string>(result.saved_staff_ids || []);
-
-      if (conflicts.length > 0) {
-        // Partial save or full conflict: retain failed drafts in state, DO NOT show general success
-        setPartialSaveInfo({
-          saved: result.saved,
-          conflicts,
+  const performSave = useCallback(
+    async (entriesMapOverride?: Map<string, EditedEntry>) => {
+      const activeEntries = entriesMapOverride || editedEntries;
+      if (activeEntries.size === 0) return;
+      setSaving(true);
+      setError('');
+      setSaveSuccess(false);
+      setPartialSaveInfo(null);
+      try {
+        const entries = Array.from(activeEntries.values()).map(entry => {
+          const payload: any = {
+            staff_id: entry.staff_id,
+            status: entry.status,
+          };
+          if (entry.shift) payload.shift = entry.shift;
+          if (entry.check_in) payload.check_in = entry.check_in;
+          if (entry.check_out) payload.check_out = entry.check_out;
+          if (entry.notes) payload.notes = entry.notes;
+          if (entry.version !== undefined) payload.version = entry.version;
+          if (entry.reason) payload.reason = entry.reason;
+          return payload;
         });
 
-        // Remove only successfully saved staff from editedEntries Map
-        setEditedEntries(prev => {
-          const next = new Map(prev);
-          for (const id of savedStaffIds) {
-            next.delete(id);
-          }
-          return next;
-        });
+        const result: any = await api.saveAttendance({ date, entries });
+        const conflicts = result.conflicts || [];
+        const savedStaffIds = new Set<string>(result.saved_staff_ids || []);
 
-        // Refetch latest records to refresh versions and background state
-        await fetchAttendance();
-      } else {
-        // Full success
-        setEditedEntries(new Map());
-        setSaveSuccess(true);
-        setTimeout(() => setSaveSuccess(false), 3500);
-        await fetchAttendance();
+        if (conflicts.length > 0) {
+          // Partial save or full conflict: retain failed drafts in state, DO NOT show general success
+          setPartialSaveInfo({
+            saved: result.saved,
+            conflicts,
+          });
+
+          // Remove only successfully saved staff from editedEntries Map
+          setEditedEntries(prev => {
+            const next = new Map(entriesMapOverride || prev);
+            for (const id of savedStaffIds) {
+              next.delete(id);
+            }
+            return next;
+          });
+
+          // Refetch latest records to refresh versions and background state
+          await fetchAttendance();
+        } else {
+          // Full success
+          setEditedEntries(new Map());
+          setSaveSuccess(true);
+          setTimeout(() => setSaveSuccess(false), 3500);
+          await fetchAttendance();
+        }
+      } catch (err: any) {
+        if (err instanceof ApiResponseError && err.isConflict) {
+          const body = (err as any).body || {};
+          setPartialSaveInfo({
+            saved: body.saved || 0,
+            conflicts: body.conflicts || [],
+          });
+          await fetchAttendance();
+        } else {
+          setError(err.message || 'Failed to save attendance records');
+        }
+      } finally {
+        setSaving(false);
       }
-    } catch (err: any) {
-      if (err instanceof ApiResponseError && err.isConflict) {
-        const body = (err as any).body || {};
-        setPartialSaveInfo({
-          saved: body.saved || 0,
-          conflicts: body.conflicts || [],
-        });
-        await fetchAttendance();
-      } else {
-        setError(err.message || 'Failed to save attendance records');
-      }
-    } finally {
-      setSaving(false);
-    }
-  }, [editedEntries, date, fetchAttendance]);
+    },
+    [editedEntries, date, fetchAttendance]
+  );
 
   const handleSave = useCallback(async () => {
     if (editedEntries.size === 0) return;
@@ -353,24 +382,20 @@ export default function AttendancePage() {
 
   const handleReasonSubmit = useCallback(() => {
     const { staffIds, reasons } = reasonDialog;
-    setEditedEntries(prev => {
-      const next = new Map(prev);
-      for (const staffId of staffIds) {
-        const entry = next.get(staffId);
-        if (entry) {
-          next.set(staffId, {
-            ...entry,
-            reason: reasons.get(staffId) || 'Attendance correction',
-          });
-        }
+    const nextMap = new Map(editedEntries);
+    for (const staffId of staffIds) {
+      const entry = nextMap.get(staffId);
+      if (entry) {
+        nextMap.set(staffId, {
+          ...entry,
+          reason: reasons.get(staffId) || 'Attendance correction',
+        });
       }
-      return next;
-    });
+    }
+    setEditedEntries(nextMap);
     setReasonDialog({ open: false, staffIds: [], reasons: new Map(), currentIndex: 0 });
-    setTimeout(() => {
-      performSave();
-    }, 0);
-  }, [reasonDialog, performSave]);
+    performSave(nextMap);
+  }, [reasonDialog, editedEntries, performSave]);
 
   const toggleNotes = (staffId: string) => {
     setExpandedNotes(prev => {
@@ -439,7 +464,7 @@ export default function AttendancePage() {
         <button
           type="button"
           className={`btn btn-sm ${statusFilter === 'all' ? 'btn-primary' : 'btn-outline'}`}
-          onClick={() => setStatusFilter('all')}
+          onClick={() => handleFilterChange('all')}
         >
           All Staff ({counts.total})
         </button>
@@ -447,7 +472,7 @@ export default function AttendancePage() {
           type="button"
           className={`btn btn-sm ${statusFilter === 'attendance' ? 'btn-primary' : 'btn-outline'}`}
           style={statusFilter === 'attendance' ? { background: '#2e7d32', borderColor: '#2e7d32', color: '#fff' } : { borderColor: '#2e7d32', color: '#2e7d32' }}
-          onClick={() => setStatusFilter('attendance')}
+          onClick={() => handleFilterChange('attendance')}
         >
           ✓ Attendance ({counts.attendance})
         </button>
@@ -455,21 +480,21 @@ export default function AttendancePage() {
           type="button"
           className={`btn btn-sm ${statusFilter === 'non_attendance' ? 'btn-primary' : 'btn-outline'}`}
           style={statusFilter === 'non_attendance' ? { background: '#c62828', borderColor: '#c62828', color: '#fff' } : { borderColor: '#c62828', color: '#c62828' }}
-          onClick={() => setStatusFilter('non_attendance')}
+          onClick={() => handleFilterChange('non_attendance')}
         >
           ✕ Non-Attendance ({counts.nonAttendance})
         </button>
         <button
           type="button"
           className={`btn btn-sm ${statusFilter === 'absent' ? 'btn-primary' : 'btn-outline'}`}
-          onClick={() => setStatusFilter('absent')}
+          onClick={() => handleFilterChange('absent')}
         >
           Absent ({counts.absent})
         </button>
         <button
           type="button"
           className={`btn btn-sm ${statusFilter === 'not_marked' ? 'btn-primary' : 'btn-outline'}`}
-          onClick={() => setStatusFilter('not_marked')}
+          onClick={() => handleFilterChange('not_marked')}
         >
           Not Marked ({counts.notMarked})
         </button>
@@ -489,7 +514,7 @@ export default function AttendancePage() {
           type="date"
           value={date}
           max={todayIST()}
-          onChange={e => setDate(e.target.value)}
+          onChange={e => handleDateChange(e.target.value)}
           style={{ maxWidth: '180px' }}
         />
         <input
@@ -501,7 +526,7 @@ export default function AttendancePage() {
         />
         <select
           value={statusFilter}
-          onChange={e => setStatusFilter(e.target.value)}
+          onChange={e => handleFilterChange(e.target.value)}
           style={{ maxWidth: '220px' }}
         >
           <option value="all">All Staff ({counts.total})</option>
@@ -605,7 +630,7 @@ export default function AttendancePage() {
                     <label>Check In</label>
                     <input
                       type="datetime-local"
-                      value={checkIn ? checkIn.slice(0, 16) : ''}
+                      value={toDatetimeLocalValue(checkIn)}
                       onChange={e => updateEntry(staff.id, 'check_in', e.target.value)}
                       disabled={!isEditable}
                     />
@@ -615,7 +640,7 @@ export default function AttendancePage() {
                     <label>Check Out</label>
                     <input
                       type="datetime-local"
-                      value={checkOut ? checkOut.slice(0, 16) : ''}
+                      value={toDatetimeLocalValue(checkOut)}
                       onChange={e => updateEntry(staff.id, 'check_out', e.target.value)}
                       disabled={!isEditable}
                     />
