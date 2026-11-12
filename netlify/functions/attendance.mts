@@ -30,6 +30,101 @@ function parseISTIsoString(dtStr: string): string | null {
   return isNaN(d.getTime()) ? null : d.toISOString();
 }
 
+const ALERT_STATUSES = new Set(['absent', 'half_day', 'unpaid_leave']);
+
+function getAlertDetails(
+  status: string,
+  staffName: string,
+  date: string,
+): { notificationType: string; subject: string; bodyHtml: string; bodyText: string } | null {
+  if (status === 'absent') {
+    return {
+      notificationType: 'absence_alert',
+      subject: `Attendance Notice: Marked Absent on ${date} — Livotel Premium Hotel`,
+      bodyText: `Dear ${staffName},\n\nThis is an automated notification from Livotel Premium Hotel, Bhubaneswar.\n\nYou have been marked Absent for duty on ${date} (Asia/Kolkata).\n\nIf this was recorded in error or you have an approved leave arrangement, please contact your hotel manager immediately.\n\nWarm regards,\nManagement\nLivotel Premium Hotel, Bhubaneswar`,
+      bodyHtml: `
+        <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 8px;">
+          <h2 style="color: #1B2A4A; margin-top: 0;">Livotel Premium Hotel, Bhubaneswar</h2>
+          <p style="font-size: 16px;">Dear <strong>${staffName}</strong>,</p>
+          <p style="font-size: 15px; color: #333;">You have been marked <strong>Absent</strong> for duty on <strong>${date}</strong> (Asia/Kolkata).</p>
+          <div style="background-color: #FFEBEE; border-left: 4px solid #C62828; padding: 12px; margin: 16px 0;">
+            <p style="margin: 0; color: #C62828; font-size: 14px;"><strong>Notice:</strong> If this was recorded in error or you have an approved leave arrangement, please contact your hotel manager immediately.</p>
+          </div>
+          <p style="font-size: 13px; color: #666; margin-top: 24px;">Warm regards,<br>Management<br>Livotel Premium Hotel, Bhubaneswar</p>
+        </div>
+      `,
+    };
+  }
+
+  if (status === 'half_day') {
+    return {
+      notificationType: 'half_day_alert',
+      subject: `Attendance Notice: Marked Half Day on ${date} — Livotel Premium Hotel`,
+      bodyText: `Dear ${staffName},\n\nThis is an automated notification from Livotel Premium Hotel, Bhubaneswar.\n\nYou have been marked for Half Day duty on ${date} (Asia/Kolkata).\n\nIf your recorded shift timing or hours require adjustment, please contact your hotel manager.\n\nWarm regards,\nManagement\nLivotel Premium Hotel, Bhubaneswar`,
+      bodyHtml: `
+        <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 8px;">
+          <h2 style="color: #1B2A4A; margin-top: 0;">Livotel Premium Hotel, Bhubaneswar</h2>
+          <p style="font-size: 16px;">Dear <strong>${staffName}</strong>,</p>
+          <p style="font-size: 15px; color: #333;">You have been marked for <strong>Half Day</strong> duty on <strong>${date}</strong> (Asia/Kolkata).</p>
+          <div style="background-color: #FFF3E0; border-left: 4px solid #EF6C00; padding: 12px; margin: 16px 0;">
+            <p style="margin: 0; color: #E65100; font-size: 14px;"><strong>Notice:</strong> If your recorded shift timing or hours require adjustment, please contact your hotel manager.</p>
+          </div>
+          <p style="font-size: 13px; color: #666; margin-top: 24px;">Warm regards,<br>Management<br>Livotel Premium Hotel, Bhubaneswar</p>
+        </div>
+      `,
+    };
+  }
+
+  if (status === 'unpaid_leave') {
+    return {
+      notificationType: 'non_attendance_alert',
+      subject: `Attendance Notice: Marked Unpaid Leave on ${date} — Livotel Premium Hotel`,
+      bodyText: `Dear ${staffName},\n\nThis is an automated notification from Livotel Premium Hotel, Bhubaneswar.\n\nYou have been marked for Unpaid Leave on ${date} (Asia/Kolkata).\n\nIf this was recorded in error, please contact your hotel manager immediately.\n\nWarm regards,\nManagement\nLivotel Premium Hotel, Bhubaneswar`,
+      bodyHtml: `
+        <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 8px;">
+          <h2 style="color: #1B2A4A; margin-top: 0;">Livotel Premium Hotel, Bhubaneswar</h2>
+          <p style="font-size: 16px;">Dear <strong>${staffName}</strong>,</p>
+          <p style="font-size: 15px; color: #333;">You have been marked for <strong>Unpaid Leave</strong> on <strong>${date}</strong> (Asia/Kolkata).</p>
+          <div style="background-color: #EFEBE9; border-left: 4px solid #4E342E; padding: 12px; margin: 16px 0;">
+            <p style="margin: 0; color: #3E2723; font-size: 14px;"><strong>Notice:</strong> If this was recorded in error or you have questions, please contact your hotel manager immediately.</p>
+          </div>
+          <p style="font-size: 13px; color: #666; margin-top: 24px;">Warm regards,<br>Management<br>Livotel Premium Hotel, Bhubaneswar</p>
+        </div>
+      `,
+    };
+  }
+
+  return null;
+}
+
+function getCorrectionDetails(
+  oldStatus: string,
+  newStatus: string,
+  staffName: string,
+  date: string,
+): { notificationType: string; subject: string; bodyHtml: string; bodyText: string } {
+  const oldLabel = STATUS_DISPLAY[oldStatus] || oldStatus;
+  const newLabel = STATUS_DISPLAY[newStatus] || newStatus;
+  const nType = oldStatus === 'half_day' ? 'half_day_correction' : 'absence_correction';
+
+  return {
+    notificationType: nType,
+    subject: `Attendance Correction: Status Updated to ${newLabel} on ${date} — Livotel Premium Hotel`,
+    bodyText: `Dear ${staffName},\n\nThis is an automated update from Livotel Premium Hotel, Bhubaneswar.\n\nYour attendance record for ${date} has been updated from ${oldLabel} to ${newLabel}.\n\nIf you have any questions, please contact your hotel manager.\n\nWarm regards,\nManagement\nLivotel Premium Hotel, Bhubaneswar`,
+    bodyHtml: `
+      <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 8px;">
+        <h2 style="color: #1B2A4A; margin-top: 0;">Livotel Premium Hotel, Bhubaneswar</h2>
+        <p style="font-size: 16px;">Dear <strong>${staffName}</strong>,</p>
+        <p style="font-size: 15px; color: #333;">Your attendance record for <strong>${date}</strong> has been updated from <strong>${oldLabel}</strong> to <strong>${newLabel}</strong>.</p>
+        <div style="background-color: #E8F5E9; border-left: 4px solid #2E7D32; padding: 12px; margin: 16px 0;">
+          <p style="margin: 0; color: #2E7D32; font-size: 14px;"><strong>Correction Applied:</strong> Your record has been successfully corrected.</p>
+        </div>
+        <p style="font-size: 13px; color: #666; margin-top: 24px;">Warm regards,<br>Management<br>Livotel Premium Hotel, Bhubaneswar</p>
+      </div>
+    `,
+  };
+}
+
 export default async (req: Request, context: Context) => {
   try {
     const user = await requireAuth(req);
@@ -283,49 +378,38 @@ export default async (req: Request, context: Context) => {
               ]
             );
 
-            // Queue absence notification / correction transactionally
+            // Queue notification / correction transactionally for non-attendance or half-day
             if (s.email && s.notify_absence) {
-              if (status === 'absent' && existing.status !== 'absent') {
-                // Transition INTO absent -> queue absence alert
-                const idempotencyKey = `absence:${staff_id}:${date}:${newVersion}`;
-                const subject = `Attendance Notice: Marked Absent on ${date} — Livotel Premium Hotel`;
-                const bodyText = `Dear ${s.full_name},\n\nThis is an automated notification from Livotel Premium Hotel, Bhubaneswar.\n\nYou have been marked Absent for duty on ${date} (Asia/Kolkata).\n\nIf this was recorded in error or you have an approved leave arrangement, please contact your hotel manager immediately.\n\nWarm regards,\nManagement\nLivotel Premium Hotel, Bhubaneswar`;
-                const bodyHtml = `
-                  <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 8px;">
-                    <h2 style="color: #1B2A4A; margin-top: 0;">Livotel Premium Hotel, Bhubaneswar</h2>
-                    <p style="font-size: 16px;">Dear <strong>${s.full_name}</strong>,</p>
-                    <p style="font-size: 15px; color: #333;">You have been marked <strong>Absent</strong> for duty on <strong>${date}</strong> (Asia/Kolkata).</p>
-                    <div style="background-color: #FFEBEE; border-left: 4px solid #C62828; padding: 12px; margin: 16px 0;">
-                      <p style="margin: 0; color: #C62828; font-size: 14px;"><strong>Notice:</strong> If this was recorded in error or you have an approved leave arrangement, please contact your hotel manager immediately.</p>
-                    </div>
-                    <p style="font-size: 13px; color: #666; margin-top: 24px;">Warm regards,<br>Management<br>Livotel Premium Hotel, Bhubaneswar</p>
-                  </div>
-                `;
-
-                await client.query(
-                  `INSERT INTO notification_outbox (
-                     staff_id, recipient_email, notification_type,
-                     idempotency_key, subject, body_html, body_text,
-                     status, metadata
-                   ) VALUES ($1, $2, 'absence_alert', $3, $4, $5, $6, 'queued', $7)
-                   ON CONFLICT (idempotency_key) DO NOTHING`,
-                  [
-                    staff_id,
-                    s.email,
-                    idempotencyKey,
-                    subject,
-                    bodyHtml,
-                    bodyText,
-                    JSON.stringify({ date, status, staff_id, full_name: s.full_name }),
-                  ]
-                );
-              } else if (existing.status === 'absent' && status !== 'absent') {
-                // Absence corrected to another status!
+              if (ALERT_STATUSES.has(status) && status !== existing.status) {
+                // Transition INTO an alert status (absent, half_day, unpaid_leave)
+                const alert = getAlertDetails(status, s.full_name, date);
+                if (alert) {
+                  const idempotencyKey = `${alert.notificationType}:${staff_id}:${date}:${newVersion}`;
+                  await client.query(
+                    `INSERT INTO notification_outbox (
+                       staff_id, recipient_email, notification_type,
+                       idempotency_key, subject, body_html, body_text,
+                       status, metadata
+                     ) VALUES ($1, $2, $3, $4, $5, $6, $7, 'queued', $8)
+                     ON CONFLICT (idempotency_key) DO NOTHING`,
+                    [
+                      staff_id,
+                      s.email,
+                      alert.notificationType,
+                      idempotencyKey,
+                      alert.subject,
+                      alert.bodyHtml,
+                      alert.bodyText,
+                      JSON.stringify({ date, status, staff_id, full_name: s.full_name }),
+                    ]
+                  );
+                }
+              } else if (ALERT_STATUSES.has(existing.status) && !ALERT_STATUSES.has(status)) {
+                // Corrected from an alert status to a normal attendance status (e.g. Present)
                 // 1. Check for strictly 'queued' alert (worker has NOT touched it yet)
                 const strictlyQueuedAlerts = await client.query(
                   `SELECT id FROM notification_outbox
                    WHERE staff_id = $1
-                     AND notification_type = 'absence_alert'
                      AND metadata->>'date' = $2
                      AND status = 'queued'`,
                   [staff_id, date]
@@ -341,52 +425,42 @@ export default async (req: Request, context: Context) => {
                      WHERE id = $2`,
                     [`Cancelled before dispatch: corrected to ${STATUS_DISPLAY[status] || status}`, strictlyQueuedAlerts.rows[0].id]
                   );
-                  // Employee was not sent an email, so no correction email is needed
                 } else {
                   // 2. Check if an alert was already in-flight ('processing') or sent ('provider_accepted', 'delivered')
-                  // NOTE: Cancellation CANNOT guarantee prevention of delivery once the worker has claimed the job
-                  // and initiated the HTTP request to the email provider. Therefore, if the alert is in-flight or sent,
-                  // we MUST queue an absence_correction notice so the employee receives the resolution.
                   const inFlightOrSent = await client.query(
                     `SELECT id, status FROM notification_outbox
                      WHERE staff_id = $1
-                       AND notification_type = 'absence_alert'
                        AND metadata->>'date' = $2
                        AND status IN ('processing', 'provider_accepted', 'delivered')`,
                     [staff_id, date]
                   );
 
                   if (inFlightOrSent.rows.length > 0) {
+                    const corr = getCorrectionDetails(existing.status, status, s.full_name, date);
                     const idempotencyKey = `correction:${staff_id}:${date}:${newVersion}`;
-                    const subject = `Attendance Correction: Status Updated to ${STATUS_DISPLAY[status] || status} on ${date} — Livotel Premium Hotel`;
-                    const bodyText = `Dear ${s.full_name},\n\nThis is an automated update from Livotel Premium Hotel, Bhubaneswar.\n\nYour attendance record for ${date} has been updated from Absent to ${STATUS_DISPLAY[status] || status}.\n\nIf you have any questions, please contact your hotel manager.\n\nWarm regards,\nManagement\nLivotel Premium Hotel, Bhubaneswar`;
-                    const bodyHtml = `
-                      <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 8px;">
-                        <h2 style="color: #1B2A4A; margin-top: 0;">Livotel Premium Hotel, Bhubaneswar</h2>
-                        <p style="font-size: 16px;">Dear <strong>${s.full_name}</strong>,</p>
-                        <p style="font-size: 15px; color: #333;">Your attendance record for <strong>${date}</strong> has been updated from <strong>Absent</strong> to <strong>${STATUS_DISPLAY[status] || status}</strong>.</p>
-                        <div style="background-color: #E8F5E9; border-left: 4px solid #2E7D32; padding: 12px; margin: 16px 0;">
-                          <p style="margin: 0; color: #2E7D32; font-size: 14px;"><strong>Correction Applied:</strong> Your record has been successfully corrected.</p>
-                        </div>
-                        <p style="font-size: 13px; color: #666; margin-top: 24px;">Warm regards,<br>Management<br>Livotel Premium Hotel, Bhubaneswar</p>
-                      </div>
-                    `;
-
                     await client.query(
                       `INSERT INTO notification_outbox (
                          staff_id, recipient_email, notification_type,
                          idempotency_key, subject, body_html, body_text,
                          status, metadata
-                       ) VALUES ($1, $2, 'absence_correction', $3, $4, $5, $6, 'queued', $7)
+                       ) VALUES ($1, $2, $3, $4, $5, $6, $7, 'queued', $8)
                        ON CONFLICT (idempotency_key) DO NOTHING`,
                       [
                         staff_id,
                         s.email,
+                        corr.notificationType,
                         idempotencyKey,
-                        subject,
-                        bodyHtml,
-                        bodyText,
-                        JSON.stringify({ date, old_status: 'absent', new_status: status, staff_id, full_name: s.full_name, previous_alert_status: inFlightOrSent.rows[0].status }),
+                        corr.subject,
+                        corr.bodyHtml,
+                        corr.bodyText,
+                        JSON.stringify({
+                          date,
+                          old_status: existing.status,
+                          new_status: status,
+                          staff_id,
+                          full_name: s.full_name,
+                          previous_alert_status: inFlightOrSent.rows[0].status,
+                        }),
                       ]
                     );
                   }
@@ -444,40 +518,30 @@ export default async (req: Request, context: Context) => {
               ]
             );
 
-            // Queue absence notification transactionally if new record is absent
-            if (status === 'absent' && s.email && s.notify_absence) {
-              const idempotencyKey = `absence:${staff_id}:${date}:1`;
-              const subject = `Attendance Notice: Marked Absent on ${date} — Livotel Premium Hotel`;
-              const bodyText = `Dear ${s.full_name},\n\nThis is an automated notification from Livotel Premium Hotel, Bhubaneswar.\n\nYou have been marked Absent for duty on ${date} (Asia/Kolkata).\n\nIf this was recorded in error or you have an approved leave arrangement, please contact your hotel manager immediately.\n\nWarm regards,\nManagement\nLivotel Premium Hotel, Bhubaneswar`;
-              const bodyHtml = `
-                <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 8px;">
-                  <h2 style="color: #1B2A4A; margin-top: 0;">Livotel Premium Hotel, Bhubaneswar</h2>
-                  <p style="font-size: 16px;">Dear <strong>${s.full_name}</strong>,</p>
-                  <p style="font-size: 15px; color: #333;">You have been marked <strong>Absent</strong> for duty on <strong>${date}</strong> (Asia/Kolkata).</p>
-                  <div style="background-color: #FFEBEE; border-left: 4px solid #C62828; padding: 12px; margin: 16px 0;">
-                    <p style="margin: 0; color: #C62828; font-size: 14px;"><strong>Notice:</strong> If this was recorded in error or you have an approved leave arrangement, please contact your hotel manager immediately.</p>
-                  </div>
-                  <p style="font-size: 13px; color: #666; margin-top: 24px;">Warm regards,<br>Management<br>Livotel Premium Hotel, Bhubaneswar</p>
-                </div>
-              `;
-
-              await client.query(
-                `INSERT INTO notification_outbox (
-                   staff_id, recipient_email, notification_type,
-                   idempotency_key, subject, body_html, body_text,
-                   status, metadata
-                 ) VALUES ($1, $2, 'absence_alert', $3, $4, $5, $6, 'queued', $7)
-                 ON CONFLICT (idempotency_key) DO NOTHING`,
-                [
-                  staff_id,
-                  s.email,
-                  idempotencyKey,
-                  subject,
-                  bodyHtml,
-                  bodyText,
-                  JSON.stringify({ date, status, staff_id, full_name: s.full_name }),
-                ]
-              );
+            // Queue alert notification transactionally if new record is an alert status (absent, half_day, unpaid_leave)
+            if (ALERT_STATUSES.has(status) && s.email && s.notify_absence) {
+              const alert = getAlertDetails(status, s.full_name, date);
+              if (alert) {
+                const idempotencyKey = `${alert.notificationType}:${staff_id}:${date}:1`;
+                await client.query(
+                  `INSERT INTO notification_outbox (
+                     staff_id, recipient_email, notification_type,
+                     idempotency_key, subject, body_html, body_text,
+                     status, metadata
+                   ) VALUES ($1, $2, $3, $4, $5, $6, $7, 'queued', $8)
+                   ON CONFLICT (idempotency_key) DO NOTHING`,
+                  [
+                    staff_id,
+                    s.email,
+                    alert.notificationType,
+                    idempotencyKey,
+                    alert.subject,
+                    alert.bodyHtml,
+                    alert.bodyText,
+                    JSON.stringify({ date, status, staff_id, full_name: s.full_name }),
+                  ]
+                );
+              }
             }
 
             savedStaffIds.push(staff_id);

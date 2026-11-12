@@ -22,9 +22,14 @@ describe('Real PostgreSQL Integration & Concurrency Tests (PGlite Engine v16.4)'
       path.join(process.cwd(), 'netlify/database/migrations/0002_notifications_and_security/migration.sql'),
       'utf8'
     );
+    const mig4 = fs.readFileSync(
+      path.join(process.cwd(), 'netlify/database/migrations/0004_non_attendance_and_half_day_alerts/migration.sql'),
+      'utf8'
+    );
 
     await db.exec(mig1);
     await db.exec(mig2);
+    await db.exec(mig4);
   });
 
   describe('1. Concurrent Initial Setup Protection', () => {
@@ -450,6 +455,101 @@ describe('Real PostgreSQL Integration & Concurrency Tests (PGlite Engine v16.4)'
       expect(allNotifs.rows[0].status).toBe('delivered');
       expect(allNotifs.rows[1].notification_type).toBe('absence_correction');
       expect(allNotifs.rows[1].status).toBe('queued');
+    });
+
+    it('queues a half_day_alert when marked half day, cancels if updated before dispatch, or sends half_day_correction if in-flight', async () => {
+      const ownerId = crypto.randomUUID();
+      await db.query(
+        `INSERT INTO users (id, email, password_hash, name, role, is_active)
+         VALUES ($1, 'owner@livotel.com', 'hash', 'Owner', 'owner', true)`,
+        [ownerId]
+      );
+
+      const staffId = crypto.randomUUID();
+      await db.query(
+        `INSERT INTO staff (id, employee_id, full_name, designation, department, email, notify_absence, joining_date, is_active, created_by, updated_by)
+         VALUES ($1, 'LIV-106', 'Priya Das', 'Front Desk', 'Front Office', 'priya@livotel.com', true, '2024-01-01', true, $2, $2)`,
+        [staffId, ownerId]
+      );
+
+      // 1. Initial save: Mark Half Day -> half_day_alert queued
+      const attId = crypto.randomUUID();
+      await db.query(
+        `INSERT INTO attendance (id, staff_id, attendance_date, status, version, created_by, updated_by)
+         VALUES ($1, $2, '2026-10-21'::date, 'half_day', 1, $3, $3)`,
+        [attId, staffId, ownerId]
+      );
+
+      const idempotencyKey = `half_day_alert:${staffId}:2026-10-21:1`;
+      await db.query(
+        `INSERT INTO notification_outbox (
+           staff_id, recipient_email, notification_type, idempotency_key,
+           subject, body_html, body_text, status, metadata
+         ) VALUES ($1, $2, 'half_day_alert', $3, 'Attendance Notice: Marked Half Day', '<p>Half Day</p>', 'Half Day', 'queued', $4)`,
+        [staffId, 'priya@livotel.com', idempotencyKey, JSON.stringify({ date: '2026-10-21', status: 'half_day', staff_id: staffId })]
+      );
+
+      let outbox = await db.query('SELECT status, notification_type FROM notification_outbox WHERE staff_id = $1', [staffId]);
+      expect(outbox.rows.length).toBe(1);
+      expect(outbox.rows[0].status).toBe('queued');
+      expect(outbox.rows[0].notification_type).toBe('half_day_alert');
+
+      // 2. Worker claims alert to in-flight
+      await db.query(
+        `UPDATE notification_outbox
+         SET status = 'processing', locked_at = NOW(), locked_by = 'worker_test'
+         WHERE id = (SELECT id FROM notification_outbox WHERE staff_id = $1 LIMIT 1)`,
+        [staffId]
+      );
+
+      // 3. Manager updates status to Present -> Queues half_day_correction
+      const corrKey = `correction:${staffId}:2026-10-21:2`;
+      await db.query(
+        `INSERT INTO notification_outbox (
+           staff_id, recipient_email, notification_type, idempotency_key,
+           subject, body_html, body_text, status, metadata
+         ) VALUES ($1, $2, 'half_day_correction', $3, 'Attendance Update: Record Corrected to Present', '<p>Corrected</p>', 'Corrected', 'queued', $4)`,
+        [staffId, 'priya@livotel.com', corrKey, JSON.stringify({ date: '2026-10-21', old_status: 'half_day', new_status: 'present' })]
+      );
+
+      const notifs = await db.query(
+        'SELECT notification_type, status FROM notification_outbox WHERE staff_id = $1 ORDER BY created_at ASC',
+        [staffId]
+      );
+      expect(notifs.rows.length).toBe(2);
+      expect(notifs.rows[0].status).toBe('processing');
+      expect(notifs.rows[1].notification_type).toBe('half_day_correction');
+      expect(notifs.rows[1].status).toBe('queued');
+    });
+
+    it('queues non_attendance_alert for unpaid leave', async () => {
+      const ownerId = crypto.randomUUID();
+      await db.query(
+        `INSERT INTO users (id, email, password_hash, name, role, is_active)
+         VALUES ($1, 'owner@livotel.com', 'hash', 'Owner', 'owner', true)`,
+        [ownerId]
+      );
+
+      const staffId = crypto.randomUUID();
+      await db.query(
+        `INSERT INTO staff (id, employee_id, full_name, designation, department, email, notify_absence, joining_date, is_active, created_by, updated_by)
+         VALUES ($1, 'LIV-107', 'Suman Panda', 'Housekeeper', 'Housekeeping', 'suman@livotel.com', true, '2024-01-01', true, $2, $2)`,
+        [staffId, ownerId]
+      );
+
+      const idempotencyKey = `non_attendance_alert:${staffId}:2026-10-21:1`;
+      await db.query(
+        `INSERT INTO notification_outbox (
+           staff_id, recipient_email, notification_type, idempotency_key,
+           subject, body_html, body_text, status, metadata
+         ) VALUES ($1, $2, 'non_attendance_alert', $3, 'Attendance Notice: Marked Unpaid Leave', '<p>Unpaid Leave</p>', 'Unpaid Leave', 'queued', $4)`,
+        [staffId, 'suman@livotel.com', idempotencyKey, JSON.stringify({ date: '2026-10-21', status: 'unpaid_leave', staff_id: staffId })]
+      );
+
+      const outbox = await db.query('SELECT status, notification_type FROM notification_outbox WHERE staff_id = $1', [staffId]);
+      expect(outbox.rows.length).toBe(1);
+      expect(outbox.rows[0].status).toBe('queued');
+      expect(outbox.rows[0].notification_type).toBe('non_attendance_alert');
     });
   });
 

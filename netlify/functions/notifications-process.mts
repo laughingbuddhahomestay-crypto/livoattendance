@@ -91,14 +91,20 @@ export default async (req: Request, context: Context) => {
             }
 
             // Check preference opt-outs
-            if (
-              (item.notification_type === 'absence_alert' || item.notification_type === 'absence_correction') &&
-              !staff.notify_absence
-            ) {
+            const isAttendanceAlert = [
+              'absence_alert',
+              'absence_correction',
+              'half_day_alert',
+              'half_day_correction',
+              'non_attendance_alert',
+              'non_attendance_correction',
+            ].includes(item.notification_type);
+
+            if (isAttendanceAlert && !staff.notify_absence) {
               await client.query(
                 `UPDATE notification_outbox
                  SET status = 'cancelled',
-                     error_message = 'Employee opted out of absence notifications prior to dispatch',
+                     error_message = 'Employee opted out of attendance notifications prior to dispatch',
                      locked_by = NULL,
                      locked_at = NULL,
                      updated_at = NOW()

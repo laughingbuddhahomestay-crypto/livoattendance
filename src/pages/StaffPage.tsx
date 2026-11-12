@@ -176,7 +176,7 @@ export default function StaffPage() {
                           <div style={{ display: 'flex', gap: '0.35rem', marginTop: '0.2rem' }}>
                             {s.notify_absence && (
                               <span style={{ fontSize: '0.7rem', background: '#fee2e2', color: '#991b1b', padding: '0.1rem 0.35rem', borderRadius: '4px' }}>
-                                Absence Alerts
+                                Absence / Half Day Alerts
                               </span>
                             )}
                             {s.notify_monthly_report && (
@@ -273,7 +273,7 @@ export default function StaffPage() {
                     <div style={{ display: 'flex', gap: '0.35rem', marginTop: '0.25rem' }}>
                       {s.notify_absence && (
                         <span style={{ fontSize: '0.7rem', background: '#fee2e2', color: '#991b1b', padding: '0.1rem 0.35rem', borderRadius: '4px' }}>
-                          Absence Alerts
+                          Absence / Half Day Alerts
                         </span>
                       )}
                       {s.notify_monthly_report && (

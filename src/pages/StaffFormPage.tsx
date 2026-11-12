@@ -295,7 +295,7 @@ export default function StaffFormPage() {
                     onChange={(e) => updateField('notify_absence', e.target.checked)}
                   />
                   <span style={{ fontSize: '0.85rem' }}>
-                    Send automated alert when marked <strong>Absent</strong>
+                    Send automated alert when marked <strong>Absent</strong>, <strong>Half Day</strong>, or <strong>Unpaid Leave</strong>
                   </span>
                 </label>
 
