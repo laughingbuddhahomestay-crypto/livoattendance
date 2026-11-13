@@ -49,9 +49,11 @@ export default async (req: Request, context: Context) => {
       }
     }
 
+    const isFuture = date > todayIST();
     const notMarked = Math.max(0, totalEmployed - totalMarked);
-    // In exception-based attendance for fixed-salary hospitality staff, all unmarked active staff are Present by default
-    const effectivePresent = counts.present + notMarked;
+    // In exception-based attendance for fixed-salary hospitality staff, all unmarked active staff are Present by default for today and past dates
+    const effectivePresent = isFuture ? counts.present : counts.present + notMarked;
+    const finalNotMarked = isFuture ? notMarked : 0;
 
     return jsonResponse({
       date,
@@ -62,7 +64,7 @@ export default async (req: Request, context: Context) => {
       weekly_off: counts.weekly_off,
       paid_leave: counts.paid_leave,
       unpaid_leave: counts.unpaid_leave,
-      not_marked: 0,
+      not_marked: finalNotMarked,
     });
   } catch (err: any) {
     console.error('dashboard error:', err);

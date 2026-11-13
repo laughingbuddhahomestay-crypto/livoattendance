@@ -190,8 +190,15 @@ export default async (req: Request, context: Context) => {
           finalLeavingDate = null;
         }
 
-        const effectiveJoining = joining_date || current.joining_date;
-        if (finalLeavingDate && effectiveJoining && finalLeavingDate < effectiveJoining) {
+        const toDateStr = (d: any): string | null => {
+          if (!d) return null;
+          if (d instanceof Date) return d.toISOString().slice(0, 10);
+          return String(d).slice(0, 10);
+        };
+
+        const effectiveJoiningStr = toDateStr(joining_date || current.joining_date);
+        const finalLeavingDateStr = toDateStr(finalLeavingDate);
+        if (finalLeavingDateStr && effectiveJoiningStr && finalLeavingDateStr < effectiveJoiningStr) {
           await client.query('ROLLBACK');
           return errorResponse('Leaving date cannot be earlier than joining date', 400);
         }

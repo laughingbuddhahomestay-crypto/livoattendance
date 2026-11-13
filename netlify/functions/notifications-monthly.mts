@@ -1,6 +1,6 @@
 import type { Config, Context } from '@netlify/functions';
 import { getDatabase } from '@netlify/database';
-import { requireOwner, jsonResponse, errorResponse } from './_shared/auth-utils.mts';
+import { requireOwner, jsonResponse, errorResponse, todayIST } from './_shared/auth-utils.mts';
 
 const STATUS_LABELS: Record<string, string> = {
   present: 'Present',
@@ -185,12 +185,18 @@ export async function generateEmployeeMonthlyReportData(db: any, staffId: string
   };
 
   const dailyRows: Array<{ day: number; date: string; status: string; label: string }> = [];
+  const today = todayIST();
 
   for (let day = 1; day <= totalDays; day++) {
     const dateStr = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
 
     // If day is before joining date or after leaving date, employee wasn't employed
     if (dateStr < s.joining_date || (s.leaving_date && dateStr > s.leaving_date)) {
+      continue;
+    }
+
+    // Skip future dates if generating report mid-month
+    if (dateStr > today) {
       continue;
     }
 

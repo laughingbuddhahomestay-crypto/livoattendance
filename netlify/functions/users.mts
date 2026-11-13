@@ -26,9 +26,12 @@ export default async (req: Request, context: Context) => {
       const body = await req.json();
       const { name, role, is_active } = body;
 
-      // Cannot deactivate yourself
+      // Cannot deactivate or demote yourself
       if (id === user.userId && is_active === false) {
         return errorResponse('You cannot deactivate your own account', 400);
+      }
+      if (id === user.userId && role !== undefined && role !== 'owner') {
+        return errorResponse('You cannot change your own role from owner', 400);
       }
 
       // Build update fields dynamically
