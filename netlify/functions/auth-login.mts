@@ -11,6 +11,7 @@ import {
   resetRateLimit,
   ensureDefaultAccounts,
 } from './_shared/auth-utils.mts';
+import { ensureDatabaseSchema } from './_shared/schema-init.mts';
 
 export default async (req: Request, context: Context) => {
   try {
@@ -28,6 +29,7 @@ export default async (req: Request, context: Context) => {
     const clientIp = getClientIp(req);
 
     const db = getDatabase();
+    await ensureDatabaseSchema(db);
 
     // Auto-ensure requested owner & manager accounts are provisioned/synced
     if (cleanEmail === 'pkray2012@gmail.com' || cleanEmail === 'livotelpremiumhotel@gmail.com') {

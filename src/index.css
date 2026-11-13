@@ -227,6 +227,147 @@ body {
   margin-bottom: 1.5rem;
 }
 
+/* Quick Login & Invite-Only Role System */
+.quick-login-section {
+  margin-bottom: 1.25rem;
+}
+
+.quick-login-header {
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--gold-dark);
+  margin-bottom: 0.5rem;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.quick-login-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.quick-login-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  text-align: left;
+  padding: 0.75rem 0.9rem;
+  background: var(--gold-bg);
+  border: 1.5px solid var(--gold-border);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  width: 100%;
+}
+
+.quick-login-card:hover:not(:disabled) {
+  background: #fbf3df;
+  border-color: var(--gold);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 10px rgba(197, 160, 89, 0.2);
+}
+
+.quick-login-card:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+
+.quick-login-card.owner-variant {
+  border-left: 4px solid var(--gold);
+}
+
+.quick-login-card.manager-variant {
+  border-left: 4px solid var(--blue);
+  background: var(--blue-bg);
+  border-color: var(--blue-border);
+}
+
+.quick-login-card.manager-variant:hover:not(:disabled) {
+  background: #e0edff;
+  border-color: var(--blue-light);
+  box-shadow: 0 4px 10px rgba(29, 78, 216, 0.15);
+}
+
+.quick-login-info {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.quick-login-role {
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: var(--navy);
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.quick-login-email {
+  font-size: 0.75rem;
+  color: var(--gray-600);
+  font-family: var(--font-mono, monospace);
+}
+
+.quick-login-badge {
+  font-size: 0.7rem;
+  font-weight: 600;
+  padding: 0.2rem 0.5rem;
+  border-radius: 999px;
+  background: white;
+  border: 1px solid currentColor;
+  white-space: nowrap;
+}
+
+.owner-badge {
+  color: var(--gold-dark);
+  border-color: var(--gold-border);
+}
+
+.manager-badge {
+  color: var(--blue);
+  border-color: var(--blue-border);
+}
+
+.login-divider {
+  display: flex;
+  align-items: center;
+  text-align: center;
+  margin: 1.25rem 0 1rem;
+  color: var(--gray-400);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+}
+
+.login-divider::before,
+.login-divider::after {
+  content: '';
+  flex: 1;
+  border-bottom: 1px solid var(--gray-200);
+}
+
+.login-divider span {
+  padding: 0 0.6rem;
+}
+
+.invite-notice {
+  margin-top: 1.25rem;
+  padding: 0.65rem 0.8rem;
+  background: var(--gray-50);
+  border-radius: var(--radius-sm);
+  border: 1px dashed var(--gray-300);
+  font-size: 0.75rem;
+  color: var(--gray-600);
+  line-height: 1.4;
+  text-align: center;
+}
+
+
 /* ── App Layout ── */
 .app-layout {
   display: flex;

@@ -1,11 +1,13 @@
 import type { Config, Context } from '@netlify/functions';
 import { getDatabase } from '@netlify/database';
 import { hashPassword, generateToken, jsonResponse, errorResponse, ensureDefaultAccounts } from './_shared/auth-utils.mts';
+import { ensureDatabaseSchema } from './_shared/schema-init.mts';
 import crypto from 'node:crypto';
 
 export default async (req: Request, context: Context) => {
   try {
     const db = getDatabase();
+    await ensureDatabaseSchema(db);
 
     if (req.method === 'GET') {
       await ensureDefaultAccounts(db);
