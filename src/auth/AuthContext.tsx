@@ -28,12 +28,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const refreshUser = useCallback(async () => {
     const token = getToken();
     if (!token) {
-      // Check if first-time setup is needed
+      // Instantly render UI without blocking on network roundtrip
+      setState({ user: null, loading: false, needsSetup: false, error: null });
       try {
         const result = await api.checkSetup();
-        setState({ user: null, loading: false, needsSetup: result.needs_setup, error: null });
+        if (result.needs_setup) {
+          setState(prev => ({ ...prev, needsSetup: true }));
+        }
       } catch {
-        setState({ user: null, loading: false, needsSetup: false, error: null });
+        // Non-fatal if setup endpoint is unreachable
       }
       return;
     }

@@ -33,11 +33,13 @@ export default function DashboardPage() {
       const data = await api.getDashboard(date);
       setStats(data as unknown as DashboardStats);
     } catch (err: any) {
-      setError(err.message || 'Failed to load dashboard');
+      if (user) {
+        setError(err.message || 'Failed to load dashboard');
+      }
     } finally {
       setLoading(false);
     }
-  }, [date]);
+  }, [date, user]);
 
   useEffect(() => {
     fetchDashboard();
@@ -153,6 +155,17 @@ export default function DashboardPage() {
             ))}
           </div>
         )
+      ) : !user ? (
+        <div className="card" style={{ textAlign: 'center', padding: '2.5rem 1.5rem', background: '#fff', border: '1px solid var(--gold-border)' }}>
+          <img src="/logo-dark.jpg" alt="Livotel" style={{ maxWidth: '90px', borderRadius: '8px', border: '2px solid var(--gold)', marginBottom: '1rem' }} />
+          <h3 style={{ color: 'var(--navy)', marginBottom: '0.5rem' }}>Welcome to Livotel Staff Attendance</h3>
+          <p style={{ color: 'var(--gray-600)', maxWidth: '480px', margin: '0 auto 1.5rem', fontSize: '0.9rem' }}>
+            Live attendance tracking, fixed-salary default present automation, absence notifications, and owner-confidential payroll management.
+          </p>
+          <button className="btn btn-primary" onClick={() => navigate('/login')}>
+            🔐 Sign In to Manage Attendance
+          </button>
+        </div>
       ) : null}
     </div>
   );
