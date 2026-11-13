@@ -42,6 +42,10 @@ describe('Real PostgreSQL Integration & Concurrency Tests (PGlite Engine v16.4)'
       path.join(process.cwd(), 'netlify/database/migrations/0008_staff_monthly_salary/migration.sql'),
       'utf8'
     );
+    const mig9 = fs.readFileSync(
+      path.join(process.cwd(), 'netlify/database/migrations/0009_password_resets/migration.sql'),
+      'utf8'
+    );
 
     await db.exec(mig1);
     await db.exec(mig2);
@@ -50,6 +54,7 @@ describe('Real PostgreSQL Integration & Concurrency Tests (PGlite Engine v16.4)'
     await db.exec(mig6);
     await db.exec(mig7);
     await db.exec(mig8);
+    await db.exec(mig9);
   });
 
   describe('1. Concurrent Initial Setup Protection', () => {
@@ -1049,6 +1054,93 @@ describe('Real PostgreSQL Integration & Concurrency Tests (PGlite Engine v16.4)'
         [staffId]
       );
       expect(managerRes.rows[0].monthly_salary).toBeUndefined();
+    });
+  });
+
+  describe('12. Password Reset Lifecycle and Token Expiry (Migration 0009)', () => {
+    it('creates a single-use reset token and successfully resets password and increments token_version', async () => {
+      const userId = crypto.randomUUID();
+      const initialHash = '$2a$12$initialHashValue12345678901234567890';
+      await db.query(
+        `INSERT INTO users (id, email, password_hash, name, role, is_active, token_version)
+         VALUES ($1, 'reset-user@livotel.com', $2, 'Reset Test User', 'manager', true, 1)`,
+        [userId, initialHash]
+      );
+
+      // Create a reset token expiring in 1 hour
+      const resetToken = crypto.randomBytes(32).toString('hex');
+      const resetId = crypto.randomUUID();
+      const expiresAt = new Date(Date.now() + 3600 * 1000).toISOString();
+
+      await db.query(
+        `INSERT INTO password_resets (id, user_id, token, expires_at)
+         VALUES ($1, $2, $3, $4)`,
+        [resetId, userId, resetToken, expiresAt]
+      );
+
+      // Verify token exists and is unused
+      const checkRes = await db.query<any>(
+        `SELECT * FROM password_resets WHERE token = $1 AND used_at IS NULL`,
+        [resetToken]
+      );
+      expect(checkRes.rows.length).toBe(1);
+
+      // Redeem reset token with new password hash
+      const newHash = '$2a$12$newCalculatedHashValue98765432109876543';
+      const now = new Date().toISOString();
+
+      await db.exec('BEGIN');
+      await db.query(
+        `UPDATE users
+         SET password_hash = $1,
+             token_version = COALESCE(token_version, 1) + 1,
+             updated_at = $2
+         WHERE id = $3`,
+        [newHash, now, userId]
+      );
+      await db.query(
+        `UPDATE password_resets
+         SET used_at = $1
+         WHERE id = $2`,
+        [now, resetId]
+      );
+      await db.exec('COMMIT');
+
+      // Verify user updated and token_version bumped
+      const userRes = await db.query<any>('SELECT password_hash, token_version FROM users WHERE id = $1', [userId]);
+      expect(userRes.rows[0].password_hash).toBe(newHash);
+      expect(userRes.rows[0].token_version).toBe(2);
+
+      // Verify token is now marked used
+      const usedCheck = await db.query<any>('SELECT used_at FROM password_resets WHERE id = $1', [resetId]);
+      expect(usedCheck.rows[0].used_at).not.toBeNull();
+    });
+
+    it('rejects expired password reset tokens', async () => {
+      const userId = crypto.randomUUID();
+      await db.query(
+        `INSERT INTO users (id, email, password_hash, name, role, is_active)
+         VALUES ($1, 'expired-reset@livotel.com', 'dummyhash', 'Expired User', 'manager', true)`,
+        [userId]
+      );
+
+      // Create already expired token (10 minutes in the past)
+      const expiredToken = crypto.randomBytes(32).toString('hex');
+      const expiredDate = new Date(Date.now() - 600 * 1000).toISOString();
+
+      await db.query(
+        `INSERT INTO password_resets (user_id, token, expires_at)
+         VALUES ($1, $2, $3)`,
+        [userId, expiredToken, expiredDate]
+      );
+
+      // Query checking validity
+      const tokenRes = await db.query<any>(
+        `SELECT * FROM password_resets
+         WHERE token = $1 AND used_at IS NULL AND expires_at > NOW()`,
+        [expiredToken]
+      );
+      expect(tokenRes.rows.length).toBe(0);
     });
   });
 });

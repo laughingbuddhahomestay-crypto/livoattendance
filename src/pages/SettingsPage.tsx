@@ -65,6 +65,13 @@ export default function SettingsPage() {
   const [healthStatus, setHealthStatus] = useState<any>(null);
   const [healthLoading, setHealthLoading] = useState(false);
 
+  // Admin Reset User Password State
+  const [resetPasswordUser, setResetPasswordUser] = useState<any | null>(null);
+  const [adminNewPassword, setAdminNewPassword] = useState('');
+  const [adminResetLoading, setAdminResetLoading] = useState(false);
+  const [adminResetMsg, setAdminResetMsg] = useState('');
+  const [adminResetErr, setAdminResetErr] = useState('');
+
   // Fetch Users & Invitations
   const fetchUsersData = useCallback(async () => {
     if (!isOwner) return;
@@ -216,6 +223,37 @@ export default function SettingsPage() {
       fetchUsersData();
     } catch (err: any) {
       alert(err.message || 'Failed to update user status');
+    }
+  };
+
+  // Handle Owner directly setting user password
+  const handleAdminResetPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!resetPasswordUser) return;
+    setAdminResetErr('');
+    setAdminResetMsg('');
+
+    if (adminNewPassword.length < 8) {
+      setAdminResetErr('New password must be at least 8 characters long.');
+      return;
+    }
+
+    setAdminResetLoading(true);
+    try {
+      const res = await api.adminResetPassword({
+        user_id: resetPasswordUser.id,
+        new_password: adminNewPassword,
+      });
+      setAdminResetMsg(res.message);
+      setAdminNewPassword('');
+      setTimeout(() => {
+        setResetPasswordUser(null);
+        setAdminResetMsg('');
+      }, 2000);
+    } catch (err: any) {
+      setAdminResetErr(err.message || 'Failed to update user password');
+    } finally {
+      setAdminResetLoading(false);
     }
   };
 
@@ -580,12 +618,28 @@ export default function SettingsPage() {
                           {u.id === user?.id ? (
                             <span style={{ fontSize: '0.75rem', color: 'var(--gray-500)' }}>Current User</span>
                           ) : (
-                            <button
-                              className="btn btn-sm btn-outline"
-                              onClick={() => handleToggleUserActive(u)}
-                            >
-                              {u.is_active ? 'Deactivate' : 'Reactivate'}
-                            </button>
+                            <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center', flexWrap: 'wrap' }}>
+                              <button
+                                className="btn btn-sm btn-outline"
+                                onClick={() => handleToggleUserActive(u)}
+                                style={{ fontSize: '0.8rem', padding: '0.2rem 0.55rem' }}
+                              >
+                                {u.is_active ? 'Deactivate' : 'Reactivate'}
+                              </button>
+                              <button
+                                className="btn btn-sm btn-secondary"
+                                onClick={() => {
+                                  setResetPasswordUser(u);
+                                  setAdminNewPassword('');
+                                  setAdminResetErr('');
+                                  setAdminResetMsg('');
+                                }}
+                                style={{ fontSize: '0.8rem', padding: '0.2rem 0.55rem' }}
+                                title="Directly set a new password for this user"
+                              >
+                                🔑 Reset Password
+                              </button>
+                            </div>
                           )}
                         </td>
                       </tr>
@@ -595,6 +649,59 @@ export default function SettingsPage() {
               </div>
             )}
           </div>
+
+          {/* Admin Reset Password Modal */}
+          {resetPasswordUser && (
+            <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '1rem' }}>
+              <div className="card" style={{ maxWidth: '440px', width: '100%', padding: '1.5rem', background: '#fff', borderRadius: '8px', boxShadow: '0 10px 25px rgba(0,0,0,0.2)' }}>
+                <h3 className="card-title" style={{ marginTop: 0, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  <span>🔑</span> Reset User Password
+                </h3>
+                <p style={{ fontSize: '0.85rem', color: 'var(--gray-600)', marginBottom: '1rem' }}>
+                  Set a new password for <strong>{resetPasswordUser.name}</strong> ({resetPasswordUser.email}).
+                </p>
+
+                {adminResetErr && <div className="alert alert-error" style={{ marginBottom: '1rem' }}>{adminResetErr}</div>}
+                {adminResetMsg && <div className="alert alert-success" style={{ marginBottom: '1rem' }}>{adminResetMsg}</div>}
+
+                <form onSubmit={handleAdminResetPassword}>
+                  <div className="form-group" style={{ marginBottom: '1rem' }}>
+                    <label style={{ fontSize: '0.85rem', fontWeight: 600, display: 'block', marginBottom: '0.35rem' }}>
+                      New Password (min 8 chars)
+                    </label>
+                    <input
+                      type="password"
+                      value={adminNewPassword}
+                      onChange={e => setAdminNewPassword(e.target.value)}
+                      placeholder="Enter new password"
+                      required
+                      minLength={8}
+                      autoFocus
+                      disabled={adminResetLoading || Boolean(adminResetMsg)}
+                    />
+                  </div>
+
+                  <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', marginTop: '1.25rem' }}>
+                    <button
+                      type="button"
+                      className="btn btn-secondary"
+                      onClick={() => setResetPasswordUser(null)}
+                      disabled={adminResetLoading}
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      className="btn btn-primary"
+                      disabled={adminResetLoading || Boolean(adminResetMsg)}
+                    >
+                      {adminResetLoading ? 'Updating…' : 'Update Password'}
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          )}
         </div>
       )}
 

@@ -136,6 +136,24 @@ export const api = {
   listInvitations: () =>
     request<{ invitations: Record<string, unknown>[] }>('/api/auth-invite', { method: 'GET' }),
 
+  forgotPassword: (email: string) =>
+    request<{ message: string; reset_link?: string }>('/api/auth-forgot-password', {
+      method: 'POST',
+      body: JSON.stringify({ email }),
+    }),
+
+  resetPassword: (payload: { token: string; new_password: string }) =>
+    request<{ message: string }>('/api/auth-reset-password', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+
+  adminResetPassword: (payload: { user_id: string; new_password: string }) =>
+    request<{ message: string }>('/api/auth-admin-reset-password', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+
   // Staff
   listStaff: (includeInactive = false) =>
     request<{ staff: Record<string, unknown>[] }>(

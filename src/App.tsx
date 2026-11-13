@@ -2,6 +2,7 @@ import React from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { useAuth } from './auth/AuthContext';
 import LoginPage from './auth/LoginPage';
+import ResetPasswordPage from './auth/ResetPasswordPage';
 import SetupPage from './auth/SetupPage';
 import AcceptInvitePage from './auth/AcceptInvitePage';
 import ProtectedRoute from './auth/ProtectedRoute';
@@ -32,6 +33,7 @@ export default function App() {
       {/* Public invite & login routes */}
       <Route path="/invite" element={<AcceptInvitePage />} />
       <Route path="/login" element={<LoginPage />} />
+      <Route path="/reset-password" element={<ResetPasswordPage />} />
       {needsSetup && <Route path="/setup" element={<SetupPage />} />}
 
       {/* Main app shell */}
