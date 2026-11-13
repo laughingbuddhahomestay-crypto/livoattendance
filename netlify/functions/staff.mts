@@ -10,50 +10,55 @@ export default async (req: Request, context: Context) => {
     const db = getDatabase();
 
     if (req.method === 'GET') {
-      await requireAuth(req);
+      const user = await requireAuth(req);
+      const isOwner = user.role === 'owner';
       const id = url.searchParams.get('id');
       const includeInactive = url.searchParams.get('include_inactive') === 'true';
 
-      if (id) {
-        const result = await db.sql`
-          SELECT id, employee_id, full_name, designation, department, phone, email,
-                 notify_absence, notify_monthly_report,
-                 TO_CHAR(joining_date, 'YYYY-MM-DD') as joining_date,
-                 TO_CHAR(leaving_date, 'YYYY-MM-DD') as leaving_date,
-                 is_active, default_shift, created_at, updated_at
-          FROM staff
-          WHERE id = ${id}
-        `;
-        if (result.length === 0) {
-          return errorResponse('Staff member not found', 404);
+      const salarySelect = isOwner ? ', COALESCE(monthly_salary, 0)::numeric as monthly_salary' : '';
+      const client = await db.pool.connect();
+      try {
+        if (id) {
+          const result = await client.query(
+            `SELECT id, employee_id, full_name, designation, department, phone, email,
+                    notify_absence, notify_monthly_report,
+                    TO_CHAR(joining_date, 'YYYY-MM-DD') as joining_date,
+                    TO_CHAR(leaving_date, 'YYYY-MM-DD') as leaving_date,
+                    is_active, default_shift, created_at, updated_at
+                    ${salarySelect}
+             FROM staff
+             WHERE id = $1`,
+            [id]
+          );
+          if (result.rows.length === 0) {
+            return errorResponse('Staff member not found', 404);
+          }
+          return jsonResponse({ staff: result.rows[0] });
         }
-        return jsonResponse({ staff: result[0] });
-      }
 
-      let result;
-      if (includeInactive) {
-        result = await db.sql`
-          SELECT id, employee_id, full_name, designation, department, phone, email,
-                 notify_absence, notify_monthly_report,
-                 TO_CHAR(joining_date, 'YYYY-MM-DD') as joining_date,
-                 TO_CHAR(leaving_date, 'YYYY-MM-DD') as leaving_date,
-                 is_active, default_shift, created_at, updated_at
-          FROM staff
-          ORDER BY full_name ASC
-        `;
-      } else {
-        result = await db.sql`
-          SELECT id, employee_id, full_name, designation, department, phone, email,
-                 notify_absence, notify_monthly_report,
-                 TO_CHAR(joining_date, 'YYYY-MM-DD') as joining_date,
-                 TO_CHAR(leaving_date, 'YYYY-MM-DD') as leaving_date,
-                 is_active, default_shift, created_at, updated_at
-          FROM staff
-          WHERE is_active = true
-          ORDER BY full_name ASC
-        `;
+        const query = includeInactive
+          ? `SELECT id, employee_id, full_name, designation, department, phone, email,
+                    notify_absence, notify_monthly_report,
+                    TO_CHAR(joining_date, 'YYYY-MM-DD') as joining_date,
+                    TO_CHAR(leaving_date, 'YYYY-MM-DD') as leaving_date,
+                    is_active, default_shift, created_at, updated_at
+                    ${salarySelect}
+             FROM staff
+             ORDER BY full_name ASC`
+          : `SELECT id, employee_id, full_name, designation, department, phone, email,
+                    notify_absence, notify_monthly_report,
+                    TO_CHAR(joining_date, 'YYYY-MM-DD') as joining_date,
+                    TO_CHAR(leaving_date, 'YYYY-MM-DD') as leaving_date,
+                    is_active, default_shift, created_at, updated_at
+                    ${salarySelect}
+             FROM staff
+             WHERE is_active = true
+             ORDER BY full_name ASC`;
+        const result = await client.query(query);
+        return jsonResponse({ staff: result.rows });
+      } finally {
+        client.release();
       }
-      return jsonResponse({ staff: result });
     }
 
     // Mutating staff requires Owner role
@@ -99,6 +104,12 @@ export default async (req: Request, context: Context) => {
         return errorResponse('Employee ID already exists. Please choose a unique ID.', 409);
       }
 
+      // Monthly salary is optional, defaults to 0, owner-controlled
+      let cleanSalary = 0;
+      if (body.monthly_salary !== undefined && body.monthly_salary !== null && body.monthly_salary !== '') {
+        cleanSalary = Math.max(0, Number(body.monthly_salary) || 0);
+      }
+
       const client = await db.pool.connect();
       try {
         const insertRes = await client.query(
@@ -106,13 +117,14 @@ export default async (req: Request, context: Context) => {
              employee_id, full_name, designation, department, phone, email,
              notify_absence, notify_monthly_report,
              joining_date, leaving_date, is_active, default_shift,
-             created_by, updated_by
-           ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $13)
+             monthly_salary, created_by, updated_by
+           ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $14)
            RETURNING id, employee_id, full_name, designation, department, phone, email,
                      notify_absence, notify_monthly_report,
                      TO_CHAR(joining_date, 'YYYY-MM-DD') as joining_date,
                      TO_CHAR(leaving_date, 'YYYY-MM-DD') as leaving_date,
-                     is_active, default_shift, created_at, updated_at`,
+                     is_active, default_shift, monthly_salary::numeric as monthly_salary,
+                     created_at, updated_at`,
           [
             employee_id.trim(),
             full_name.trim(),
@@ -126,6 +138,7 @@ export default async (req: Request, context: Context) => {
             leaving_date || null,
             Boolean(is_active),
             default_shift ? default_shift.trim() : null,
+            cleanSalary,
             user.userId,
           ]
         );
@@ -207,6 +220,11 @@ export default async (req: Request, context: Context) => {
         const finalNotifyAbsence = notify_absence !== undefined ? Boolean(notify_absence) : current.notify_absence;
         const finalNotifyMonthly = notify_monthly_report !== undefined ? Boolean(notify_monthly_report) : current.notify_monthly_report;
 
+        const cleanSalary =
+          body.monthly_salary !== undefined
+            ? Math.max(0, Number(body.monthly_salary) || 0)
+            : undefined;
+
         const updateRes = await client.query(
           `UPDATE staff
            SET full_name = COALESCE($1, full_name),
@@ -220,14 +238,16 @@ export default async (req: Request, context: Context) => {
                leaving_date = $9,
                is_active = $10,
                default_shift = $11,
+               monthly_salary = COALESCE($12, monthly_salary),
                updated_at = NOW(),
-               updated_by = $12
-           WHERE id = $13
+               updated_by = $13
+           WHERE id = $14
            RETURNING id, employee_id, full_name, designation, department, phone, email,
                      notify_absence, notify_monthly_report,
                      TO_CHAR(joining_date, 'YYYY-MM-DD') as joining_date,
                      TO_CHAR(leaving_date, 'YYYY-MM-DD') as leaving_date,
-                     is_active, default_shift, created_at, updated_at`,
+                     is_active, default_shift, monthly_salary::numeric as monthly_salary,
+                     created_at, updated_at`,
           [
             full_name ? full_name.trim() : null,
             designation ? designation.trim() : null,
@@ -240,6 +260,7 @@ export default async (req: Request, context: Context) => {
             finalLeavingDate || null,
             finalIsActive,
             default_shift !== undefined ? (default_shift ? default_shift.trim() : null) : current.default_shift,
+            cleanSalary,
             user.userId,
             id,
           ]

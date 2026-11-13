@@ -16,6 +16,7 @@ interface StaffFormData {
   email: string;
   notify_absence: boolean;
   notify_monthly_report: boolean;
+  monthly_salary?: string | number;
   joining_date: string;
   leaving_date: string;
   default_shift: string;
@@ -31,6 +32,7 @@ const emptyForm: StaffFormData = {
   email: '',
   notify_absence: true,
   notify_monthly_report: true,
+  monthly_salary: 0,
   joining_date: '',
   leaving_date: '',
   default_shift: '',
@@ -70,6 +72,7 @@ export default function StaffFormPage() {
         email: s.email || '',
         notify_absence: Boolean(s.notify_absence),
         notify_monthly_report: Boolean(s.notify_monthly_report),
+        monthly_salary: s.monthly_salary !== undefined ? s.monthly_salary : 0,
         joining_date: s.joining_date || '',
         leaving_date: s.leaving_date || '',
         default_shift: s.default_shift || '',
@@ -136,6 +139,10 @@ export default function StaffFormPage() {
       if (isOwner) {
         payload.notify_absence = form.notify_absence;
         payload.notify_monthly_report = form.notify_monthly_report;
+        payload.monthly_salary =
+          form.monthly_salary !== '' && form.monthly_salary !== undefined
+            ? Math.max(0, Number(form.monthly_salary) || 0)
+            : 0;
       }
 
       if (isEdit) {
@@ -323,6 +330,31 @@ export default function StaffFormPage() {
                 </div>
               )}
             </div>
+
+            {/* Owner Confidential Salary (Strictly hidden from managers) */}
+            {isOwner && (
+              <div style={{ padding: '0.9rem', background: '#f8fafc', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+                <label className="label" style={{ fontWeight: 600, color: 'var(--primary)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.4rem' }}>
+                  <span>🔒 Monthly Salary (₹)</span>
+                  <span style={{ fontSize: '0.7rem', background: '#e0e7ff', color: '#3730a3', padding: '0.15rem 0.45rem', borderRadius: '4px', fontWeight: 500 }}>
+                    Owner Confidential (Hidden from Managers)
+                  </span>
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  step="1"
+                  value={form.monthly_salary !== undefined ? form.monthly_salary : 0}
+                  onChange={(e) => updateField('monthly_salary', e.target.value)}
+                  className="input"
+                  placeholder="0"
+                  style={{ maxWidth: '240px' }}
+                />
+                <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '0.35rem' }}>
+                  Defaults to ₹0. Keep as 0 if you do not wish to track salary. Managers can never view or access this field.
+                </div>
+              </div>
+            )}
 
             {/* Joining Date */}
             <div>

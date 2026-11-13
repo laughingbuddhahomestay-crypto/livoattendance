@@ -77,6 +77,7 @@ export interface Staff {
   email?: string | null;
   notify_absence?: boolean;
   notify_monthly_report?: boolean;
+  monthly_salary?: number;
   joining_date: string; // YYYY-MM-DD
   leaving_date: string | null;
   is_active: boolean;
@@ -200,6 +201,7 @@ export interface StaffFormData {
   email?: string;
   notify_absence?: boolean;
   notify_monthly_report?: boolean;
+  monthly_salary?: number;
   joining_date: string;
   leaving_date?: string;
   is_active: boolean;

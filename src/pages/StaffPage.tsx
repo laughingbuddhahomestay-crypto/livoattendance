@@ -168,6 +168,11 @@ export default function StaffPage() {
                     <td>
                       <div>{s.department}</div>
                       <div style={{ fontSize: '0.8rem', color: '#64748b' }}>{s.designation}</div>
+                      {isOwner && s.monthly_salary !== undefined && Number(s.monthly_salary) > 0 && (
+                        <div style={{ fontSize: '0.75rem', color: '#047857', fontWeight: 600, marginTop: '0.15rem' }}>
+                          ₹{Number(s.monthly_salary).toLocaleString('en-IN')}/mo
+                        </div>
+                      )}
                     </td>
                     <td>
                       {s.email ? (
@@ -251,6 +256,11 @@ export default function StaffPage() {
                     <div style={{ fontSize: '0.8rem', color: '#64748b' }}>
                       {s.employee_id} · {s.designation} ({s.department})
                     </div>
+                    {isOwner && s.monthly_salary !== undefined && Number(s.monthly_salary) > 0 && (
+                      <div style={{ fontSize: '0.75rem', color: '#047857', fontWeight: 600, marginTop: '0.15rem' }}>
+                        ₹{Number(s.monthly_salary).toLocaleString('en-IN')}/mo
+                      </div>
+                    )}
                   </div>
                   <span
                     style={{
