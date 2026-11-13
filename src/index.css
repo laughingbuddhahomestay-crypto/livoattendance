@@ -262,6 +262,7 @@ body {
   cursor: pointer;
   transition: all 0.2s ease;
   width: 100%;
+  gap: 0.5rem;
 }
 
 .quick-login-card:hover:not(:disabled) {
@@ -296,6 +297,8 @@ body {
   display: flex;
   flex-direction: column;
   gap: 0.15rem;
+  min-width: 0;
+  flex: 1;
 }
 
 .quick-login-role {
@@ -311,6 +314,10 @@ body {
   font-size: 0.75rem;
   color: var(--gray-600);
   font-family: var(--font-mono, monospace);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
 }
 
 .quick-login-badge {
@@ -321,6 +328,7 @@ body {
   background: white;
   border: 1px solid currentColor;
   white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .owner-badge {

@@ -87,7 +87,10 @@ export default function StaffFormPage() {
 
   useEffect(() => {
     if (isEdit) fetchStaff();
-  }, [isEdit, fetchStaff]);
+    else if (!isOwner) {
+      navigate('/staff', { replace: true });
+    }
+  }, [isEdit, isOwner, fetchStaff, navigate]);
 
   const updateField = (field: keyof StaffFormData, value: string | boolean) => {
     setForm((prev) => ({ ...prev, [field]: value }));
@@ -181,10 +184,16 @@ export default function StaffFormPage() {
   return (
     <div>
       <div className="page-header">
-        <h1 className="page-title">{isEdit ? 'Edit Staff' : 'Add Staff'}</h1>
+        <h1 className="page-title">{isEdit ? (isOwner ? 'Edit Staff' : 'Staff Details') : 'Add Staff'}</h1>
       </div>
 
       {error && <ErrorBanner message={error} />}
+
+      {!isOwner && isEdit && (
+        <div className="alert alert-info" style={{ maxWidth: '640px', marginBottom: '1rem' }}>
+          ℹ️ You are viewing this staff profile in read-only mode. Adding and editing staff members is restricted to the Owner.
+        </div>
+      )}
 
       <div className="card" style={{ maxWidth: '640px', padding: '1.5rem' }}>
         <form onSubmit={handleSubmit}>
@@ -199,7 +208,7 @@ export default function StaffFormPage() {
                 value={form.employee_id}
                 onChange={(e) => updateField('employee_id', e.target.value)}
                 className="input"
-                disabled={isEdit}
+                disabled={isEdit || !isOwner}
                 placeholder="e.g. EMP001"
               />
               {validationErrors.employee_id && (
@@ -217,6 +226,7 @@ export default function StaffFormPage() {
                 value={form.name}
                 onChange={(e) => updateField('name', e.target.value)}
                 className="input"
+                disabled={!isOwner}
                 placeholder="Staff full name"
               />
               {validationErrors.name && (
@@ -234,6 +244,7 @@ export default function StaffFormPage() {
                 value={form.designation}
                 onChange={(e) => updateField('designation', e.target.value)}
                 className="input"
+                disabled={!isOwner}
                 placeholder="e.g. Receptionist, Chef"
               />
               {validationErrors.designation && (
@@ -250,6 +261,7 @@ export default function StaffFormPage() {
                 value={form.department}
                 onChange={(e) => updateField('department', e.target.value)}
                 className="input"
+                disabled={!isOwner}
               >
                 <option value="">Select department</option>
                 {DEPARTMENTS.map((d) => (
@@ -272,6 +284,7 @@ export default function StaffFormPage() {
                   value={form.phone}
                   onChange={(e) => updateField('phone', e.target.value)}
                   className="input"
+                  disabled={!isOwner}
                   placeholder="e.g. 9876543210 (optional)"
                 />
               </div>
@@ -282,6 +295,7 @@ export default function StaffFormPage() {
                   value={form.email}
                   onChange={(e) => updateField('email', e.target.value)}
                   className="input"
+                  disabled={!isOwner}
                   placeholder="staff@example.com (optional)"
                 />
                 {validationErrors.email && (
@@ -300,7 +314,7 @@ export default function StaffFormPage() {
               </p>
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: form.email ? 'pointer' : 'not-allowed' }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: form.email && isOwner ? 'pointer' : 'not-allowed' }}>
                   <input
                     type="checkbox"
                     checked={form.notify_absence}
@@ -312,7 +326,7 @@ export default function StaffFormPage() {
                   </span>
                 </label>
 
-                <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: form.email ? 'pointer' : 'not-allowed' }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: form.email && isOwner ? 'pointer' : 'not-allowed' }}>
                   <input
                     type="checkbox"
                     checked={form.notify_monthly_report}
@@ -366,6 +380,7 @@ export default function StaffFormPage() {
                 value={form.joining_date}
                 onChange={(e) => updateField('joining_date', e.target.value)}
                 className="input"
+                disabled={!isOwner}
               />
               {validationErrors.joining_date && (
                 <span style={{ color: '#ef4444', fontSize: '0.8rem' }}>{validationErrors.joining_date}</span>
@@ -381,6 +396,7 @@ export default function StaffFormPage() {
                   value={form.leaving_date}
                   onChange={(e) => updateField('leaving_date', e.target.value)}
                   className="input"
+                  disabled={!isOwner}
                 />
               </div>
             )}
@@ -389,10 +405,11 @@ export default function StaffFormPage() {
             {/* Active checkbox (edit only) */}
             {isEdit && (
               <div>
-                <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: isOwner ? 'pointer' : 'not-allowed' }}>
                   <input
                     type="checkbox"
                     checked={form.is_active}
+                    disabled={!isOwner}
                     onChange={(e) => updateField('is_active', e.target.checked)}
                   />
                   <span className="label" style={{ margin: 0 }}>Active Employee</span>
@@ -403,17 +420,29 @@ export default function StaffFormPage() {
             {/* Actions */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem', marginTop: '0.5rem' }}>
               <div style={{ display: 'flex', gap: '0.75rem' }}>
-                <button type="submit" className="btn btn-primary" disabled={submitting || deleting}>
-                  {submitting ? 'Saving…' : isEdit ? 'Update Staff' : 'Add Staff'}
-                </button>
-                <button
-                  type="button"
-                  className="btn btn-secondary"
-                  onClick={() => navigate('/staff')}
-                  disabled={submitting || deleting}
-                >
-                  Cancel
-                </button>
+                {isOwner ? (
+                  <>
+                    <button type="submit" className="btn btn-primary" disabled={submitting || deleting}>
+                      {submitting ? 'Saving…' : isEdit ? 'Update Staff' : 'Add Staff'}
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-secondary"
+                      onClick={() => navigate('/staff')}
+                      disabled={submitting || deleting}
+                    >
+                      Cancel
+                    </button>
+                  </>
+                ) : (
+                  <button
+                    type="button"
+                    className="btn btn-secondary"
+                    onClick={() => navigate('/staff')}
+                  >
+                    ← Back to Staff List
+                  </button>
+                )}
               </div>
 
               {isEdit && isOwner && (

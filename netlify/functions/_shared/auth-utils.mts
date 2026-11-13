@@ -358,15 +358,6 @@ export async function ensureDefaultAccounts(db: any): Promise<void> {
         is_active = true,
         updated_at = NOW()
     `;
-
-    // Clear rate limits so user cannot be locked out
-    await db.sql`
-      DELETE FROM login_rate_limits
-      WHERE key IN (
-        'email:pkray2012@gmail.com',
-        'email:livotelpremiumhotel@gmail.com'
-      )
-    `;
   } catch (err) {
     console.warn('ensureDefaultAccounts non-fatal notice:', err);
   }

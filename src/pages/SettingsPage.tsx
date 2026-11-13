@@ -106,23 +106,30 @@ export default function SettingsPage() {
       });
       setNotifications(res.entries || []);
       setNotificationsTotal(res.total || 0);
-
-      // Load staff list for report dispatch if not yet loaded
-      if (staffList.length === 0) {
-        const staffRes = await api.listStaff(true);
-        const st = (staffRes as any).staff || [];
-        setStaffList(st);
-        if (st.length > 0 && !selectedStaffId) {
-          const withEmail = st.find((s: any) => s.email);
-          setSelectedStaffId(withEmail ? withEmail.id : st[0].id);
-        }
-      }
     } catch (err: any) {
       setNotifError(err.message || 'Failed to load notifications history');
     } finally {
       setNotifLoading(false);
     }
-  }, [isOwner, notifStatusFilter, staffList.length, selectedStaffId]);
+  }, [isOwner, notifStatusFilter]);
+
+  const fetchStaffListOnce = useCallback(async () => {
+    if (!isOwner) return;
+    try {
+      const staffRes = await api.listStaff(true);
+      const st = (staffRes as any).staff || [];
+      setStaffList(st);
+      if (st.length > 0) {
+        setSelectedStaffId((curr) => {
+          if (curr) return curr;
+          const withEmail = st.find((s: any) => s.email);
+          return withEmail ? withEmail.id : st[0].id;
+        });
+      }
+    } catch {
+      // non-fatal
+    }
+  }, [isOwner]);
 
   useEffect(() => {
     if (activeTab === 'users' && isOwner) {
@@ -131,8 +138,11 @@ export default function SettingsPage() {
       fetchLocks();
     } else if (activeTab === 'notifications' && isOwner) {
       fetchNotifications();
+      if (staffList.length === 0) {
+        fetchStaffListOnce();
+      }
     }
-  }, [activeTab, isOwner, fetchUsersData, fetchLocks, fetchNotifications]);
+  }, [activeTab, isOwner, fetchUsersData, fetchLocks, fetchNotifications, fetchStaffListOnce, staffList.length]);
 
   // Handle password change
   const handlePasswordChange = async (e: React.FormEvent) => {

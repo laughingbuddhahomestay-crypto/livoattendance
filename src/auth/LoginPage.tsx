@@ -136,7 +136,6 @@ export default function LoginPage() {
               onChange={e => setEmail(e.target.value)}
               placeholder="you@livotelhotel.com"
               required
-              autoFocus
               autoComplete="email"
             />
           </div>

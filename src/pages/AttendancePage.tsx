@@ -180,6 +180,16 @@ export default function AttendancePage() {
   }, [sortedStaff, search, statusFilter, editedEntries, originalRecords]);
 
   const handleDateChange = (newDate: string) => {
+    if (newDate === date) return;
+    if (hasChanges) {
+      const confirmDiscard = window.confirm(
+        'You have unsaved attendance edits on this date. Discard them and switch date?'
+      );
+      if (!confirmDiscard) return;
+    }
+    setEditedEntries(new Map());
+    setError('');
+    setSaveSuccess(false);
     setDate(newDate);
     setSearchParams(prev => {
       const next = new URLSearchParams(prev);

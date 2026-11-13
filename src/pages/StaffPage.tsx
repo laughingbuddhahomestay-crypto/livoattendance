@@ -217,7 +217,7 @@ export default function StaffPage() {
                           onClick={() => navigate(`/staff/${s.id}/edit`)}
                           style={{ fontSize: '0.85rem', padding: '0.25rem 0.75rem' }}
                         >
-                          Edit
+                          {isOwner ? 'Edit' : 'View'}
                         </button>
                         {isOwner && (
                           <button
@@ -300,7 +300,7 @@ export default function StaffPage() {
                     className="btn btn-secondary btn-sm"
                     onClick={() => navigate(`/staff/${s.id}/edit`)}
                   >
-                    Edit
+                    {isOwner ? 'Edit' : 'View'}
                   </button>
                   {isOwner && (
                     <button

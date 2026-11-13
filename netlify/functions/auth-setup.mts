@@ -102,7 +102,7 @@ export default async (req: Request, context: Context) => {
     if (err.code === '23505') {
       return errorResponse('Email already exists', 409);
     }
-    return errorResponse(err.message || 'Internal server error', 500);
+    return errorResponse('Setup service temporarily unavailable. Please try again.', 500);
   }
 };
 

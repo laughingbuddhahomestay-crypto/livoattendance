@@ -104,7 +104,7 @@ export default async (req: Request, context: Context) => {
     return jsonResponse({ token, user: userWithoutPassword });
   } catch (err: any) {
     console.error('auth-login error:', err);
-    return errorResponse(err.message || 'Internal server error', 500);
+    return errorResponse('Authentication service temporarily unavailable. Please try again shortly.', 500);
   }
 };
 
