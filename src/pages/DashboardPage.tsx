@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { api } from '../api/client';
 import { todayIST, STATUS_COLORS } from '../types';
+import { useAuth } from '../auth/AuthContext';
 import LoadingSpinner from '../components/LoadingSpinner';
 import ErrorBanner from '../components/ErrorBanner';
 
@@ -17,6 +19,8 @@ interface DashboardStats {
 }
 
 export default function DashboardPage() {
+  const navigate = useNavigate();
+  const { user } = useAuth();
   const [date, setDate] = useState(todayIST());
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [loading, setLoading] = useState(true);
@@ -82,6 +86,49 @@ export default function DashboardPage() {
           </div>
         </div>
       </div>
+
+      {!user ? (
+        <div
+          className="card guest-cta-card mb-2"
+          style={{
+            background: 'var(--gold-bg)',
+            border: '1.5px solid var(--gold-border)',
+            padding: '1rem 1.25rem',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            flexWrap: 'wrap',
+            gap: '0.75rem',
+            borderRadius: 'var(--radius-md)',
+          }}
+        >
+          <div>
+            <div style={{ fontWeight: 700, color: 'var(--navy)', fontSize: '0.95rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+              <span>👋</span> Live Hotel Attendance Overview
+            </div>
+            <p style={{ margin: '0.2rem 0 0 0', fontSize: '0.85rem', color: 'var(--gray-600)' }}>
+              Viewing live hotel overview. Sign in as Owner or Hotel Manager to record daily attendance, manage staff, or run monthly reports.
+            </p>
+          </div>
+          <button
+            className="btn btn-primary"
+            style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', whiteSpace: 'nowrap' }}
+            onClick={() => navigate('/login')}
+          >
+            <span>🔐</span>
+            <span>Sign In / Login</span>
+          </button>
+        </div>
+      ) : (
+        <div style={{ marginBottom: '1rem', display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+          <button className="btn btn-primary btn-sm" onClick={() => navigate('/attendance')}>
+            📋 Mark Today's Attendance
+          </button>
+          <button className="btn btn-secondary btn-sm" onClick={() => navigate('/reports')}>
+            📄 Monthly Reports
+          </button>
+        </div>
+      )}
 
       {error && <ErrorBanner message={error} onRetry={fetchDashboard} />}
 

@@ -10,12 +10,12 @@ export default function Layout() {
 
   const handleLogout = () => {
     logout();
-    navigate('/login');
+    navigate('/');
   };
 
   const navItems = [
-    { to: '/attendance', label: 'Attendance', icon: '📋' },
     { to: '/dashboard', label: 'Dashboard', icon: '📊' },
+    { to: '/attendance', label: 'Attendance', icon: '📋' },
     { to: '/staff', label: 'Staff', icon: '👥' },
     { to: '/reports', label: 'Reports', icon: '📄' },
     { to: '/settings', label: 'Settings', icon: '⚙️' },
@@ -36,7 +36,7 @@ export default function Layout() {
           >
             ☰
           </button>
-          <div className="header-brand">
+          <div className="header-brand" onClick={() => navigate('/dashboard')} style={{ cursor: 'pointer' }}>
             <div className="header-logo-badge">
               <img src="/logo-light.png" alt="Livotel" className="header-logo" />
             </div>
@@ -47,15 +47,35 @@ export default function Layout() {
           </div>
         </div>
         <div className="header-right">
-          <span className="header-user">
-            <span className="header-user-name">{user?.name}</span>
-            <span className={`role-badge role-${user?.role || 'manager'}`}>
-              {user?.role === 'owner' ? '★ Owner' : 'Manager'}
-            </span>
-          </span>
-          <button className="btn btn-sm btn-header-logout" onClick={handleLogout}>
-            Sign Out
-          </button>
+          {user ? (
+            <>
+              <span className="header-user">
+                <span className="header-user-name">{user.name}</span>
+                <span className={`role-badge role-${user.role || 'manager'}`}>
+                  {user.role === 'owner' ? '★ Owner' : 'Manager'}
+                </span>
+              </span>
+              <button className="btn btn-sm btn-header-logout" onClick={handleLogout}>
+                Sign Out
+              </button>
+            </>
+          ) : (
+            <button
+              className="btn btn-sm btn-primary"
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.4rem',
+                fontWeight: 600,
+                padding: '0.35rem 0.85rem',
+                boxShadow: '0 2px 6px rgba(197, 160, 89, 0.3)',
+              }}
+              onClick={() => navigate('/login')}
+            >
+              <span>🔐</span>
+              <span>Sign In</span>
+            </button>
+          )}
         </div>
       </header>
 
@@ -71,6 +91,17 @@ export default function Layout() {
             <span className="nav-label">{item.label}</span>
           </NavLink>
         ))}
+        {!user && (
+          <NavLink
+            to="/login"
+            className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}
+            onClick={() => setMenuOpen(false)}
+            style={{ marginTop: 'auto', borderTop: '1px solid rgba(255, 255, 255, 0.1)', paddingTop: '0.75rem' }}
+          >
+            <span className="nav-icon">🔐</span>
+            <span className="nav-label">Sign In</span>
+          </NavLink>
+        )}
       </nav>
 
       {menuOpen && <div className="nav-overlay" onClick={() => setMenuOpen(false)} />}
@@ -81,23 +112,44 @@ export default function Layout() {
 
       {/* Mobile bottom nav */}
       <nav className="bottom-nav">
-        {navItems.slice(0, 4).map(item => (
-          <NavLink
-            key={item.to}
-            to={item.to}
-            className={({ isActive }) => `bottom-nav-item ${isActive ? 'active' : ''}`}
-          >
-            <span className="nav-icon">{item.icon}</span>
-            <span className="nav-label">{item.label}</span>
-          </NavLink>
-        ))}
         <NavLink
-          to="/settings"
+          to="/dashboard"
           className={({ isActive }) => `bottom-nav-item ${isActive ? 'active' : ''}`}
         >
-          <span className="nav-icon">⚙️</span>
-          <span className="nav-label">More</span>
+          <span className="nav-icon">📊</span>
+          <span className="nav-label">Dashboard</span>
         </NavLink>
+        <NavLink
+          to="/attendance"
+          className={({ isActive }) => `bottom-nav-item ${isActive ? 'active' : ''}`}
+        >
+          <span className="nav-icon">📋</span>
+          <span className="nav-label">Attendance</span>
+        </NavLink>
+        <NavLink
+          to="/reports"
+          className={({ isActive }) => `bottom-nav-item ${isActive ? 'active' : ''}`}
+        >
+          <span className="nav-icon">📄</span>
+          <span className="nav-label">Reports</span>
+        </NavLink>
+        {user ? (
+          <NavLink
+            to="/settings"
+            className={({ isActive }) => `bottom-nav-item ${isActive ? 'active' : ''}`}
+          >
+            <span className="nav-icon">⚙️</span>
+            <span className="nav-label">Settings</span>
+          </NavLink>
+        ) : (
+          <NavLink
+            to="/login"
+            className={({ isActive }) => `bottom-nav-item ${isActive ? 'active' : ''}`}
+          >
+            <span className="nav-icon">🔐</span>
+            <span className="nav-label">Sign In</span>
+          </NavLink>
+        )}
       </nav>
     </div>
   );

@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useNavigate, Navigate } from 'react-router-dom';
 import { useAuth } from './AuthContext';
 
 interface QuickAccount {
@@ -30,18 +31,24 @@ const QUICK_ACCOUNTS: Record<'owner' | 'manager', QuickAccount> = {
 };
 
 export default function LoginPage() {
-  const { login } = useAuth();
+  const { user, login } = useAuth();
+  const navigate = useNavigate();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [activeQuickRole, setActiveQuickRole] = useState<'owner' | 'manager' | null>(null);
 
+  if (user) {
+    return <Navigate to="/dashboard" replace />;
+  }
+
   const performLogin = async (loginEmail: string, loginPass: string) => {
     setError('');
     setLoading(true);
     try {
       await login(loginEmail.trim().toLowerCase(), loginPass);
+      navigate('/dashboard');
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Login failed. Please check credentials or network.');
     } finally {
@@ -71,6 +78,17 @@ export default function LoginPage() {
   return (
     <div className="login-page">
       <div className="login-card">
+        <div style={{ marginBottom: '0.75rem', display: 'flex', justifyContent: 'flex-start' }}>
+          <button
+            type="button"
+            className="btn btn-secondary btn-sm"
+            onClick={() => navigate('/dashboard')}
+            style={{ fontSize: '0.8rem', padding: '0.25rem 0.65rem' }}
+          >
+            ← View Live Dashboard
+          </button>
+        </div>
+
         <img src="/logo-dark.jpg" alt="Livotel Premium Hotel" className="login-logo" />
         <h1>Staff Attendance</h1>
         <p className="login-subtitle">Livotel Premium Hotel, Bhubaneswar</p>

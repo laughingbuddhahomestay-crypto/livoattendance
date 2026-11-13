@@ -29,43 +29,43 @@ export default function App() {
 
   return (
     <Routes>
-      {/* Public routes */}
+      {/* Public invite & login routes */}
       <Route path="/invite" element={<AcceptInvitePage />} />
+      <Route path="/login" element={<LoginPage />} />
+      {needsSetup && <Route path="/setup" element={<SetupPage />} />}
 
-      {needsSetup && !user ? (
-        <Route path="*" element={<SetupPage />} />
-      ) : !user ? (
-        <Route path="*" element={<LoginPage />} />
-      ) : (
-        <Route element={<Layout />}>
-          <Route index element={<Navigate to="/attendance" replace />} />
-          <Route path="/dashboard" element={
-            <ProtectedRoute><DashboardPage /></ProtectedRoute>
-          } />
-          <Route path="/attendance" element={
-            <ProtectedRoute><AttendancePage /></ProtectedRoute>
-          } />
-          <Route path="/staff" element={
-            <ProtectedRoute><StaffPage /></ProtectedRoute>
-          } />
-          <Route path="/staff/new" element={
-            <ProtectedRoute><StaffFormPage /></ProtectedRoute>
-          } />
-          <Route path="/staff/:id/edit" element={
-            <ProtectedRoute><StaffFormPage /></ProtectedRoute>
-          } />
-          <Route path="/reports" element={
-            <ProtectedRoute><ReportsPage /></ProtectedRoute>
-          } />
-          <Route path="/settings" element={
-            <ProtectedRoute><SettingsPage /></ProtectedRoute>
-          } />
-          <Route path="/audit" element={
-            <ProtectedRoute requiredRole="owner"><AuditPage /></ProtectedRoute>
-          } />
-          <Route path="*" element={<Navigate to="/attendance" replace />} />
-        </Route>
-      )}
+      {/* Main app shell */}
+      <Route element={<Layout />}>
+        {/* Dashboard is the default landing viewable immediately without login */}
+        <Route index element={<DashboardPage />} />
+        <Route path="/dashboard" element={<DashboardPage />} />
+
+        {/* Operational views requiring Owner / Manager authentication */}
+        <Route path="/attendance" element={
+          <ProtectedRoute><AttendancePage /></ProtectedRoute>
+        } />
+        <Route path="/staff" element={
+          <ProtectedRoute><StaffPage /></ProtectedRoute>
+        } />
+        <Route path="/staff/new" element={
+          <ProtectedRoute><StaffFormPage /></ProtectedRoute>
+        } />
+        <Route path="/staff/:id/edit" element={
+          <ProtectedRoute><StaffFormPage /></ProtectedRoute>
+        } />
+        <Route path="/reports" element={
+          <ProtectedRoute><ReportsPage /></ProtectedRoute>
+        } />
+        <Route path="/settings" element={
+          <ProtectedRoute><SettingsPage /></ProtectedRoute>
+        } />
+        <Route path="/audit" element={
+          <ProtectedRoute requiredRole="owner"><AuditPage /></ProtectedRoute>
+        } />
+
+        {/* Fallback to live dashboard */}
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Route>
     </Routes>
   );
 }

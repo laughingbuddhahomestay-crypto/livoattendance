@@ -1,11 +1,19 @@
 import type { Config, Context } from '@netlify/functions';
 import { getDatabase } from '@netlify/database';
 import { requireAuth, jsonResponse, errorResponse, todayIST } from './_shared/auth-utils.mts';
+import { ensureDatabaseSchema } from './_shared/schema-init.mts';
 
 export default async (req: Request, context: Context) => {
   try {
-    await requireAuth(req);
+    // Optional auth: dashboard summary metrics are viewable publicly
+    try {
+      await requireAuth(req);
+    } catch {
+      // Guest view allowed for summary numbers
+    }
+
     const db = getDatabase();
+    await ensureDatabaseSchema(db);
     const url = new URL(req.url);
 
     let date = url.searchParams.get('date');
