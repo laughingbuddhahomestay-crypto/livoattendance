@@ -18,7 +18,7 @@ declare const Netlify: {
 
 export default async (request: Request, context: EdgeContext) => {
   const stagingPass = Netlify.env.get("STAGING_PASSWORD");
-  const stagingUser = Netlify.env.get("STAGING_USER") || "livotel_staging";
+  const stagingUser = Netlify.env.get("STAGING_USER") || "admin";
 
   // If no staging password is set, allow request through (production mode)
   if (!stagingPass) {
