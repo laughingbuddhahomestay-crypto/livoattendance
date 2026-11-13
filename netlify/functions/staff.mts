@@ -260,7 +260,7 @@ export default async (req: Request, context: Context) => {
             finalLeavingDate || null,
             finalIsActive,
             default_shift !== undefined ? (default_shift ? default_shift.trim() : null) : current.default_shift,
-            cleanSalary,
+            cleanSalary !== undefined ? cleanSalary : null,
             user.userId,
             id,
           ]

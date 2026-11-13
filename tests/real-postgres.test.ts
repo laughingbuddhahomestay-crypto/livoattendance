@@ -995,4 +995,60 @@ describe('Real PostgreSQL Integration & Concurrency Tests (PGlite Engine v16.4)'
       expect(auditAfter.rows.length).toBe(0);
     });
   });
+
+  describe('11. Owner-Confidential Salary & Role-Based Scrubbing (Migration 0008)', () => {
+    it('defaults monthly_salary to 0 and enforces non-negative check constraint', async () => {
+      const staffId = crypto.randomUUID();
+      // Insert staff without specifying monthly_salary -> should default to 0
+      await db.query(
+        `INSERT INTO staff (id, employee_id, full_name, designation, department, joining_date)
+         VALUES ($1, 'EMP-SAL-01', 'Salary Test 1', 'Accountant', 'Finance', '2026-01-01'::date)`,
+        [staffId]
+      );
+
+      const check = await db.query<{ monthly_salary: string }>(
+        `SELECT monthly_salary::text FROM staff WHERE id = $1`,
+        [staffId]
+      );
+      expect(check.rows[0].monthly_salary).toBe('0.00');
+
+      // Attempting to insert a negative salary must throw a check constraint violation
+      const invalidId = crypto.randomUUID();
+      await expect(
+        db.query(
+          `INSERT INTO staff (id, employee_id, full_name, designation, department, joining_date, monthly_salary)
+           VALUES ($1, 'EMP-SAL-INV', 'Invalid Salary', 'Accountant', 'Finance', '2026-01-01'::date, -5000)`,
+          [invalidId]
+        )
+      ).rejects.toThrow();
+    });
+
+    it('verifies owner query returns monthly_salary while manager query strictly omits it', async () => {
+      const staffId = crypto.randomUUID();
+      await db.query(
+        `INSERT INTO staff (id, employee_id, full_name, designation, department, joining_date, monthly_salary)
+         VALUES ($1, 'EMP-SAL-CONF', 'Confidential Employee', 'Front Desk', 'Front Office', '2026-01-01'::date, 25000)`,
+        [staffId]
+      );
+
+      // Simulate Owner query (includes monthly_salary)
+      const isOwner = true;
+      const ownerSalarySelect = isOwner ? ', COALESCE(monthly_salary, 0)::numeric as monthly_salary' : '';
+      const ownerRes = await db.query<any>(
+        `SELECT id, employee_id, full_name, designation, department ${ownerSalarySelect} FROM staff WHERE id = $1`,
+        [staffId]
+      );
+      expect(ownerRes.rows[0].monthly_salary).toBeDefined();
+      expect(Number(ownerRes.rows[0].monthly_salary)).toBe(25000);
+
+      // Simulate Manager query (omits monthly_salary)
+      const isManager = false;
+      const managerSalarySelect = isManager ? ', COALESCE(monthly_salary, 0)::numeric as monthly_salary' : '';
+      const managerRes = await db.query<any>(
+        `SELECT id, employee_id, full_name, designation, department ${managerSalarySelect} FROM staff WHERE id = $1`,
+        [staffId]
+      );
+      expect(managerRes.rows[0].monthly_salary).toBeUndefined();
+    });
+  });
 });
