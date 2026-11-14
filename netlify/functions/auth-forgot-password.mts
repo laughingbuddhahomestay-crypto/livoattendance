@@ -103,9 +103,11 @@ export default async (req: Request, context: Context) => {
       await recordFailedAttempt(`forgot_ip:${clientIp}`);
     }
 
+    const isDevOrPreview = process.env.NODE_ENV !== 'production' || process.env.CONTEXT === 'deploy-preview';
+
     return jsonResponse({
-      message: 'If an account exists with that email, a password reset link has been dispatched.',
-      reset_link: resetLink,
+      message: 'If an account exists with that email, a password reset link has been dispatched to your email address.',
+      ...(isDevOrPreview && resetLink ? { reset_link: resetLink } : {}),
     });
   } catch (err: any) {
     console.error('auth-forgot-password error:', err);

@@ -1142,5 +1142,66 @@ describe('Real PostgreSQL Integration & Concurrency Tests (PGlite Engine v16.4)'
       );
       expect(tokenRes.rows.length).toBe(0);
     });
+
+    it('successfully queues password_reset notification into outbox', async () => {
+      const idempotencyKey = `pwd_reset_test_${Date.now()}`;
+      const res = await db.query(
+        `INSERT INTO notification_outbox (
+           recipient_email, notification_type, idempotency_key, subject,
+           body_html, body_text, status
+         ) VALUES (
+           'pkray2012@gmail.com', 'password_reset', $1, 'Reset Password',
+           '<p>Test Reset</p>', 'Test Reset', 'queued'
+         ) RETURNING id, notification_type, status`,
+        [idempotencyKey]
+      );
+      expect(res.rows.length).toBe(1);
+      expect(res.rows[0].notification_type).toBe('password_reset');
+      expect(res.rows[0].status).toBe('queued');
+    });
+
+    it('admin reset invalidates outstanding self-service reset tokens', async () => {
+      const userId = crypto.randomUUID();
+      await db.query(
+        `INSERT INTO users (id, email, password_hash, name, role, is_active)
+         VALUES ($1, 'admin-target@livotel.com', 'initialHash', 'Admin Reset Target', 'manager', true)`,
+        [userId]
+      );
+
+      // Create an outstanding reset token
+      const outstandingToken = crypto.randomBytes(32).toString('hex');
+      const futureDate = new Date(Date.now() + 3600 * 1000).toISOString();
+      await db.query(
+        `INSERT INTO password_resets (user_id, token, expires_at)
+         VALUES ($1, $2, $3)`,
+        [userId, outstandingToken, futureDate]
+      );
+
+      // Simulate admin reset
+      const now = new Date().toISOString();
+      await db.exec('BEGIN');
+      await db.query(
+        `UPDATE users
+         SET password_hash = $1,
+             token_version = COALESCE(token_version, 1) + 1,
+             updated_at = $2
+         WHERE id = $3`,
+        ['newAdminHash', now, userId]
+      );
+      await db.query(
+        `UPDATE password_resets
+         SET used_at = $1
+         WHERE user_id = $2 AND used_at IS NULL`,
+        [now, userId]
+      );
+      await db.exec('COMMIT');
+
+      // Verify outstanding token is now marked used
+      const checkRes = await db.query<any>(
+        `SELECT used_at FROM password_resets WHERE token = $1`,
+        [outstandingToken]
+      );
+      expect(checkRes.rows[0].used_at).not.toBeNull();
+    });
   });
 });

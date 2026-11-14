@@ -11,9 +11,10 @@ export default async (req: Request, context: Context) => {
       await requireAuth(req);
       const res = await db.sql`
         SELECT ml.id, ml.year, ml.month, ml.locked_at, ml.locked_by,
-               u.name as locked_by_name, u.email as locked_by_email
+               COALESCE(u.name, 'Executive') as locked_by_name,
+               COALESCE(u.email, '') as locked_by_email
         FROM month_locks ml
-        JOIN users u ON ml.locked_by = u.id
+        LEFT JOIN users u ON ml.locked_by = u.id
         ORDER BY ml.year DESC, ml.month DESC
       `;
       return jsonResponse({ locks: res });

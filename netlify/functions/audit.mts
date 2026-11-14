@@ -46,11 +46,15 @@ export default async (req: Request, context: Context) => {
                 TO_CHAR(a.attendance_date, 'YYYY-MM-DD') as attendance_date,
                 a.previous_values, a.new_values, a.change_reason,
                 a.changed_by, a.changed_at,
-                s.full_name as staff_name, s.employee_id, s.department,
-                u.name as changed_by_name, u.email as changed_by_email, u.role as changed_by_role
+                COALESCE(s.full_name, 'Former Staff') as staff_name,
+                COALESCE(s.employee_id, 'N/A') as employee_id,
+                COALESCE(s.department, 'General') as department,
+                COALESCE(u.name, 'System / Former User') as changed_by_name,
+                COALESCE(u.email, '') as changed_by_email,
+                COALESCE(u.role, 'system') as changed_by_role
          FROM attendance_audit a
-         JOIN staff s ON a.staff_id = s.id
-         JOIN users u ON a.changed_by = u.id
+         LEFT JOIN staff s ON a.staff_id = s.id
+         LEFT JOIN users u ON a.changed_by = u.id
          ${whereStr}
          ORDER BY a.changed_at DESC
          LIMIT $${pIdx++} OFFSET $${pIdx++}`,

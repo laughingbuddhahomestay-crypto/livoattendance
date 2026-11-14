@@ -68,16 +68,31 @@ export default function LoginPage() {
     await performLogin(email, password);
   };
 
+  const isLocalOrStaging =
+    import.meta.env.DEV ||
+    (typeof window !== 'undefined' &&
+      (window.location.hostname === 'localhost' ||
+       window.location.hostname === '127.0.0.1' ||
+       window.location.hostname.includes('staging') ||
+       window.location.hostname.includes('preview')));
+
   const handleQuickLogin = async (role: 'owner' | 'manager') => {
     setActiveQuickRole(role);
-    if (role === 'owner') {
-      setEmail(QUICK_ACCOUNTS.owner.email);
-      setPassword('Livotel@2027');
-      await performLogin(QUICK_ACCOUNTS.owner.email, 'Livotel@2027');
+    const targetEmail = role === 'owner' ? QUICK_ACCOUNTS.owner.email : QUICK_ACCOUNTS.manager.email;
+    setEmail(targetEmail);
+
+    if (isLocalOrStaging) {
+      // 1-click automatic sign-in for local development, previews & staging environments
+      const targetPass = role === 'owner' ? 'Livotel@2027' : 'Livo@2026';
+      setPassword(targetPass);
+      await performLogin(targetEmail, targetPass);
     } else {
-      setEmail(QUICK_ACCOUNTS.manager.email);
-      setPassword('Livo@2026');
-      await performLogin(QUICK_ACCOUNTS.manager.email, 'Livo@2026');
+      // On public production: pre-fill email, focus password field, do not expose credentials
+      setPassword('');
+      setError('');
+      setActiveQuickRole(null);
+      const passInput = document.getElementById('password');
+      if (passInput) passInput.focus();
     }
   };
 
@@ -200,7 +215,7 @@ export default function LoginPage() {
             {/* 1-Click Role Logins */}
             <div className="quick-login-section">
               <div className="quick-login-header">
-                <span>⚡ Quick 1-Click Login</span>
+                <span>{isLocalOrStaging ? '⚡ Quick 1-Click Login' : '⚡ Quick Role Select'}</span>
               </div>
               <div className="quick-login-grid">
                 <button
@@ -217,7 +232,11 @@ export default function LoginPage() {
                     <span className="quick-login-email">{QUICK_ACCOUNTS.owner.email}</span>
                   </div>
                   <span className={`quick-login-badge ${QUICK_ACCOUNTS.owner.badgeClass}`}>
-                    {activeQuickRole === 'owner' && loading ? 'Signing in…' : QUICK_ACCOUNTS.owner.badge}
+                    {activeQuickRole === 'owner' && loading
+                      ? 'Signing in…'
+                      : isLocalOrStaging
+                      ? QUICK_ACCOUNTS.owner.badge
+                      : 'Select'}
                   </span>
                 </button>
 
@@ -235,7 +254,11 @@ export default function LoginPage() {
                     <span className="quick-login-email">{QUICK_ACCOUNTS.manager.email}</span>
                   </div>
                   <span className={`quick-login-badge ${QUICK_ACCOUNTS.manager.badgeClass}`}>
-                    {activeQuickRole === 'manager' && loading ? 'Signing in…' : QUICK_ACCOUNTS.manager.badge}
+                    {activeQuickRole === 'manager' && loading
+                      ? 'Signing in…'
+                      : isLocalOrStaging
+                      ? QUICK_ACCOUNTS.manager.badge
+                      : 'Select'}
                   </span>
                 </button>
               </div>

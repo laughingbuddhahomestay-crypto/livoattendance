@@ -20,7 +20,11 @@ export default async (req: Request, context: Context) => {
     return jsonResponse({ user: result[0] });
   } catch (err: any) {
     console.error('auth-me error:', err);
-    if (err.message === 'Missing or invalid Authorization header' || err.message === 'Invalid or expired token') {
+    if (
+      err.message === 'Missing or invalid Authorization header' ||
+      err.message === 'Invalid or expired token' ||
+      err.message?.includes('revoked')
+    ) {
       return errorResponse(err.message, 401);
     }
     if (err.message === 'User account is deactivated') {

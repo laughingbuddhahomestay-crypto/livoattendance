@@ -173,7 +173,7 @@ export async function ensureDatabaseSchema(db: any): Promise<void> {
                                 'absence_alert', 'absence_correction',
                                 'half_day_alert', 'half_day_correction',
                                 'non_attendance_alert', 'non_attendance_correction',
-                                'monthly_report'
+                                'monthly_report', 'password_reset'
                               )),
           idempotency_key     TEXT UNIQUE NOT NULL,
           subject             TEXT NOT NULL,
@@ -196,6 +196,24 @@ export async function ensureDatabaseSchema(db: any): Promise<void> {
           sent_at             TIMESTAMPTZ,
           updated_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
         );
+
+        -- Ensure notification_type check constraint includes password_reset on existing databases
+        ALTER TABLE notification_outbox DROP CONSTRAINT IF EXISTS notification_outbox_notification_type_check;
+        ALTER TABLE notification_outbox ADD CONSTRAINT notification_outbox_notification_type_check
+          CHECK (notification_type IN (
+            'absence_alert', 'absence_correction',
+            'half_day_alert', 'half_day_correction',
+            'non_attendance_alert', 'non_attendance_correction',
+            'monthly_report', 'password_reset'
+          ));
+
+        -- Defensive schema self-healing for pre-existing databases
+        ALTER TABLE users ADD COLUMN IF NOT EXISTS token_version INTEGER NOT NULL DEFAULT 1;
+        ALTER TABLE staff ADD COLUMN IF NOT EXISTS monthly_salary NUMERIC(12, 2) DEFAULT 0;
+        ALTER TABLE staff ADD COLUMN IF NOT EXISTS notify_absence BOOLEAN NOT NULL DEFAULT true;
+        ALTER TABLE staff ADD COLUMN IF NOT EXISTS notify_monthly_report BOOLEAN NOT NULL DEFAULT true;
+        ALTER TABLE staff DROP CONSTRAINT IF EXISTS check_staff_leaving_after_joining;
+        ALTER TABLE staff ADD CONSTRAINT check_staff_leaving_after_joining CHECK (leaving_date IS NULL OR leaving_date >= joining_date);
       `);
 
       // 10. Key Performance & Composite Indexes

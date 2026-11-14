@@ -52,6 +52,14 @@ export default async (req: Request, context: Context) => {
         [newHash, now, user_id]
       );
 
+      // Invalidate any outstanding self-service reset tokens for this user
+      await client.query(
+        `UPDATE password_resets
+         SET used_at = $1
+         WHERE user_id = $2 AND used_at IS NULL`,
+        [now, user_id]
+      );
+
       // Clear rate limits so the user can immediately log in
       await client.query(
         `DELETE FROM login_rate_limits
