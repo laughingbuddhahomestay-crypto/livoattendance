@@ -166,49 +166,43 @@ export function extractAndVerifyToken(req: Request): { payload: UserPayload; tok
   }
 
   const token = authHeader.substring(7);
-  try {
-    const decoded = jwt.verify(token, JWT_SECRET) as any;
-    return {
-      payload: {
-        userId: decoded.userId || decoded.sub,
-        email: decoded.email,
-        role: decoded.role || (decoded.app_metadata?.roles?.includes('admin') ? 'admin' : 'manager'),
-        name: decoded.name || decoded.user_metadata?.full_name || decoded.email.split('@')[0],
-        jti: decoded.jti,
-        tokenVersion: decoded.tokenVersion,
-      },
-      token,
-      exp: decoded.exp,
-    };
-  } catch (err) {
-    // If local JWT verification fails, check if it is a Netlify Identity token
-    try {
-      const decoded = jwt.decode(token) as any;
-      if (decoded && decoded.email) {
-        if (decoded.exp && decoded.exp * 1000 < Date.now()) {
-          throw new Error('Token has expired');
-        }
-        const roles: string[] = decoded.app_metadata?.roles || [];
-        const role = (roles.includes('admin') || roles.includes('owner')) ? 'admin' : 'manager';
-        const name = decoded.user_metadata?.full_name || decoded.user_metadata?.name || decoded.email.split('@')[0];
 
-        return {
-          payload: {
-            userId: decoded.sub,
-            email: decoded.email.toLowerCase(),
-            role,
-            name,
-            tokenVersion: 1,
-          },
-          token,
-          exp: decoded.exp,
-        };
-      }
+  // Cryptographically verify token signature against configured secrets
+  const secrets = [
+    process.env.NETLIFY_IDENTITY_SECRET,
+    JWT_SECRET,
+  ].filter(Boolean) as string[];
+
+  let decoded: any = null;
+  for (const secret of secrets) {
+    try {
+      decoded = jwt.verify(token, secret);
+      if (decoded) break;
     } catch {
-      // Fall through to error
+      // Try next configured secret
     }
+  }
+
+  if (!decoded || !decoded.email) {
     throw new Error('Invalid or expired token');
   }
+
+  const roles: string[] = decoded.app_metadata?.roles || [];
+  const role = decoded.role || ((roles.includes('admin') || roles.includes('owner')) ? 'admin' : 'manager');
+  const name = decoded.name || decoded.user_metadata?.full_name || decoded.user_metadata?.name || decoded.email.split('@')[0];
+
+  return {
+    payload: {
+      userId: decoded.userId || decoded.sub,
+      email: decoded.email.toLowerCase(),
+      role,
+      name,
+      jti: decoded.jti,
+      tokenVersion: decoded.tokenVersion || 1,
+    },
+    token,
+    exp: decoded.exp,
+  };
 }
 
 export async function verifyToken(req: Request): Promise<UserPayload> {

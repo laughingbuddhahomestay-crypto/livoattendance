@@ -27,6 +27,10 @@ export default async (req: Request, context: Context) => {
       return errorResponse('User not found', 404);
     }
 
+    if (!result[0].password_hash) {
+      return errorResponse('Your password is managed through Netlify Identity. Please use Netlify Identity password recovery.', 400);
+    }
+
     // Verify current password
     const valid = await comparePassword(current_password, result[0].password_hash);
     if (!valid) {

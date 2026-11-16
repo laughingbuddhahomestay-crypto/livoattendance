@@ -87,6 +87,10 @@ export default async (req: Request, context: Context) => {
       return errorResponse('Your account has been deactivated. Please contact an administrator.', 403);
     }
 
+    if (!user.password_hash) {
+      return errorResponse('This account is managed through Netlify Identity. Please sign in using the Netlify Identity button.', 401);
+    }
+
     const valid = await comparePassword(password, user.password_hash);
     if (!valid) {
       await recordFailedAttempt(`ip:${clientIp}`);

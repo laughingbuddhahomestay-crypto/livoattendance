@@ -766,7 +766,7 @@ export default function AttendancePage() {
                         <span>
                           ✏️ Last updated by <strong>{original.updated_by_name}</strong>{' '}
                           <span
-                            className={`badge badge-${original.updated_by_role === 'owner' ? 'owner' : 'manager'}`}
+                            className={`badge badge-${(original.updated_by_role === 'owner' || original.updated_by_role === 'admin') ? 'owner' : 'manager'}`}
                             style={{ fontSize: '0.65rem', padding: '1px 5px', textTransform: 'uppercase' }}
                           >
                             {original.updated_by_role || 'MANAGER'}
@@ -778,7 +778,7 @@ export default function AttendancePage() {
                         <span>
                           📝 Marked by <strong>{original.created_by_name}</strong>{' '}
                           <span
-                            className={`badge badge-${original.created_by_role === 'owner' ? 'owner' : 'manager'}`}
+                            className={`badge badge-${(original.created_by_role === 'owner' || original.created_by_role === 'admin') ? 'owner' : 'manager'}`}
                             style={{ fontSize: '0.65rem', padding: '1px 5px', textTransform: 'uppercase' }}
                           >
                             {original.created_by_role || 'MANAGER'}

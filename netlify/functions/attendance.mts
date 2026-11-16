@@ -212,15 +212,15 @@ export default async (req: Request, context: Context) => {
         // Coordinate shared lock with month locking transactions
         await client.query('SELECT pg_advisory_xact_lock_shared(hashtext($1))', [`month_lock_${year}_${month}`]);
 
-        // Check if month is locked
+        // Check if month is locked (administrators can edit locked months)
         const lockCheck = await client.query(
           'SELECT id FROM month_locks WHERE year = $1 AND month = $2',
           [year, month]
         );
-        if (lockCheck.rows.length > 0) {
+        if (lockCheck.rows.length > 0 && user.role !== 'admin' && user.role !== 'owner') {
           await client.query('ROLLBACK');
           return errorResponse(
-            `Month ${month}/${year} is locked. It must be unlocked by the owner before modifying records.`,
+            `Month ${month}/${year} is locked. It must be unlocked by the administrator before modifying records.`,
             403
           );
         }

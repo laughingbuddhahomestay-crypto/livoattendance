@@ -83,7 +83,7 @@ export default async (req: Request, context: Context) => {
     if (err.message === 'Missing or invalid Authorization header' || err.message === 'Invalid or expired token') {
       return errorResponse(err.message, 401);
     }
-    if (err.message === 'Owner access required') {
+    if (err.message === 'Admin access required' || err.message === 'Owner access required') {
       return errorResponse(err.message, 403);
     }
     return errorResponse('Unable to update user password.', 500);

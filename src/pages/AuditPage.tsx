@@ -240,7 +240,7 @@ export default function AuditPage() {
                       <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', flexWrap: 'wrap' }}>
                         <strong>{e.changed_by_name}</strong>
                         <span
-                          className={`badge badge-${e.changed_by_role === 'owner' ? 'owner' : 'manager'}`}
+                          className={`badge badge-${(e.changed_by_role === 'owner' || e.changed_by_role === 'admin') ? 'owner' : 'manager'}`}
                           style={{ fontSize: '0.65rem', padding: '1px 5px', textTransform: 'uppercase' }}
                         >
                           {e.changed_by_role || 'MANAGER'}

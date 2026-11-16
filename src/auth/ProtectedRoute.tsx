@@ -6,9 +6,10 @@ import type { UserRole } from '../types';
 interface Props {
   children: React.ReactNode;
   requiredRole?: UserRole;
+  allowedRoles?: UserRole[];
 }
 
-export default function ProtectedRoute({ children, requiredRole }: Props) {
+export default function ProtectedRoute({ children, requiredRole, allowedRoles }: Props) {
   const { user, loading } = useAuth();
 
   if (loading) {
@@ -24,7 +25,15 @@ export default function ProtectedRoute({ children, requiredRole }: Props) {
     return <Navigate to="/login" replace />;
   }
 
-  if (requiredRole && user.role !== requiredRole) {
+  const isPermitted = allowedRoles
+    ? allowedRoles.includes(user.role)
+    : requiredRole
+    ? (requiredRole === 'admin' || requiredRole === 'owner')
+      ? (user.role === 'admin' || user.role === 'owner')
+      : user.role === requiredRole
+    : true;
+
+  if (!isPermitted) {
     return (
       <div className="error-page">
         <h2>Access Denied</h2>

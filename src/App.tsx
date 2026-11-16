@@ -62,7 +62,7 @@ export default function App() {
           <ProtectedRoute><SettingsPage /></ProtectedRoute>
         } />
         <Route path="/audit" element={
-          <ProtectedRoute requiredRole="owner"><AuditPage /></ProtectedRoute>
+          <ProtectedRoute allowedRoles={['admin', 'owner']}><AuditPage /></ProtectedRoute>
         } />
 
         {/* Fallback to live dashboard */}

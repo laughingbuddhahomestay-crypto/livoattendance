@@ -30,26 +30,52 @@ export function getNetlifyIdentity(): any | null {
 }
 
 export function initNetlifyIdentity(onLogin?: (user: NetlifyUser) => void, onLogout?: () => void) {
-  const ni = getNetlifyIdentity();
-  if (!ni) return;
+  const tryInit = () => {
+    const ni = getNetlifyIdentity();
+    if (!ni) return false;
 
-  try {
-    ni.init();
+    try {
+      ni.init();
 
-    if (onLogin) {
-      ni.on('login', (user: NetlifyUser) => {
-        onLogin(user);
-        ni.close();
-      });
+      // Auto-open modal if hash token is present (invite, recovery, confirmation)
+      if (typeof window !== 'undefined' && window.location.hash && /_token=/.test(window.location.hash)) {
+        ni.open();
+      }
+
+      if (onLogin) {
+        ni.on('login', (user: NetlifyUser) => {
+          onLogin(user);
+          ni.close();
+
+          // Clean up URL hash to prevent loop/stale token history
+          if (typeof window !== 'undefined' && window.location.hash && /_token=/.test(window.location.hash)) {
+            window.history.replaceState('', document.title, window.location.pathname + window.location.search);
+          }
+        });
+      }
+
+      if (onLogout) {
+        ni.on('logout', () => {
+          onLogout();
+        });
+      }
+
+      return true;
+    } catch (err) {
+      console.warn('[IDENTITY] Netlify Identity init notice:', err);
+      return true;
     }
+  };
 
-    if (onLogout) {
-      ni.on('logout', () => {
-        onLogout();
-      });
-    }
-  } catch (err) {
-    console.warn('[IDENTITY] Netlify Identity init notice:', err);
+  if (!tryInit()) {
+    // Retry polling briefly in case the CDN script is still downloading
+    let attempts = 0;
+    const interval = setInterval(() => {
+      attempts++;
+      if (tryInit() || attempts >= 30) {
+        clearInterval(interval);
+      }
+    }, 100);
   }
 }
 

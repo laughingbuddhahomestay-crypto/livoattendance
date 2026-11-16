@@ -216,7 +216,15 @@ export type NotificationStatus =
   | 'failed'
   | 'bounced'
   | 'cancelled';
-export type NotificationType = 'absence_alert' | 'absence_correction' | 'monthly_report';
+export type NotificationType =
+  | 'absence_alert'
+  | 'absence_correction'
+  | 'half_day_alert'
+  | 'half_day_correction'
+  | 'non_attendance_alert'
+  | 'non_attendance_correction'
+  | 'monthly_report'
+  | 'password_reset';
 
 export interface NotificationOutboxEntry {
   id: string;

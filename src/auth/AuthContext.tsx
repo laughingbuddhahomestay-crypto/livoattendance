@@ -28,7 +28,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   });
 
   const refreshUser = useCallback(async () => {
-    const token = getToken();
+    let token = getToken();
+
+    // If Netlify Identity user is present, attempt to retrieve a fresh JWT
+    const ni = typeof window !== 'undefined' ? (window as any).netlifyIdentity : null;
+    const currentNiUser = ni?.currentUser();
+    if (currentNiUser) {
+      try {
+        const freshJwt = await currentNiUser.jwt();
+        if (freshJwt) {
+          token = freshJwt;
+          setToken(freshJwt);
+        }
+      } catch {
+        // Fall back to existing token in storage
+      }
+    }
+
     if (!token) {
       setState({ user: null, loading: false, needsSetup: false, error: null });
       return;
