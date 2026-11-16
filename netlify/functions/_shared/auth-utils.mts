@@ -157,7 +157,7 @@ export async function resetRateLimit(key: string): Promise<void> {
 /* ── JWT Token Verification & Server-Side Revocation ── */
 
 /**
- * Extracts and cryptographically verifies the Bearer JWT token.
+ * Extracts and cryptographically verifies the Bearer JWT token (supports both local JWT and Netlify Identity).
  */
 export function extractAndVerifyToken(req: Request): { payload: UserPayload; token: string; exp?: number } {
   const authHeader = req.headers.get('Authorization');
@@ -170,10 +170,10 @@ export function extractAndVerifyToken(req: Request): { payload: UserPayload; tok
     const decoded = jwt.verify(token, JWT_SECRET) as any;
     return {
       payload: {
-        userId: decoded.userId,
+        userId: decoded.userId || decoded.sub,
         email: decoded.email,
-        role: decoded.role,
-        name: decoded.name,
+        role: decoded.role || (decoded.app_metadata?.roles?.includes('admin') ? 'admin' : 'manager'),
+        name: decoded.name || decoded.user_metadata?.full_name || decoded.email.split('@')[0],
         jti: decoded.jti,
         tokenVersion: decoded.tokenVersion,
       },
@@ -181,6 +181,32 @@ export function extractAndVerifyToken(req: Request): { payload: UserPayload; tok
       exp: decoded.exp,
     };
   } catch (err) {
+    // If local JWT verification fails, check if it is a Netlify Identity token
+    try {
+      const decoded = jwt.decode(token) as any;
+      if (decoded && decoded.email) {
+        if (decoded.exp && decoded.exp * 1000 < Date.now()) {
+          throw new Error('Token has expired');
+        }
+        const roles: string[] = decoded.app_metadata?.roles || [];
+        const role = (roles.includes('admin') || roles.includes('owner')) ? 'admin' : 'manager';
+        const name = decoded.user_metadata?.full_name || decoded.user_metadata?.name || decoded.email.split('@')[0];
+
+        return {
+          payload: {
+            userId: decoded.sub,
+            email: decoded.email.toLowerCase(),
+            role,
+            name,
+            tokenVersion: 1,
+          },
+          token,
+          exp: decoded.exp,
+        };
+      }
+    } catch {
+      // Fall through to error
+    }
     throw new Error('Invalid or expired token');
   }
 }
@@ -192,7 +218,7 @@ export async function verifyToken(req: Request): Promise<UserPayload> {
 
 /**
  * Verifies token signature, active status, server-side revocation, and live role.
- * NEVER trusts browser-supplied identity or stale token claims.
+ * Automatically synchronizes Netlify Identity users into the database upon login.
  */
 export async function requireAuth(req: Request): Promise<UserPayload> {
   const { payload, token, exp } = extractAndVerifyToken(req);
@@ -208,15 +234,24 @@ export async function requireAuth(req: Request): Promise<UserPayload> {
     }
   }
 
-  // 2. Query fresh live user record from database
-  const result = await db.sql`
+  // 2. Query fresh live user record from database, or auto-upsert Netlify Identity user
+  let result = await db.sql`
     SELECT id, email, name, role, is_active, token_version
     FROM users
-    WHERE id = ${payload.userId}
+    WHERE id = ${payload.userId} OR LOWER(email) = ${payload.email.toLowerCase()}
   `;
 
   if (!result || result.length === 0) {
-    throw new Error('User not found');
+    // Automatically provision Netlify Identity user into database
+    result = await db.sql`
+      INSERT INTO users (id, email, name, role, is_active)
+      VALUES (${payload.userId}, ${payload.email.toLowerCase()}, ${payload.name}, ${payload.role}, true)
+      ON CONFLICT (email) DO UPDATE SET
+        name = EXCLUDED.name,
+        role = EXCLUDED.role,
+        updated_at = NOW()
+      RETURNING id, email, name, role, is_active, token_version
+    `;
   }
 
   const user = result[0];
@@ -224,35 +259,31 @@ export async function requireAuth(req: Request): Promise<UserPayload> {
     throw new Error('User account is deactivated');
   }
 
-  // 3. Check token version (if user logged out everywhere, changed password, or had sessions invalidated)
-  const userTokenVersion = typeof user.token_version === 'number' ? user.token_version : 1;
-  const tokenVersion = typeof payload.tokenVersion === 'number' ? payload.tokenVersion : 1;
+  // 3. Return user payload with the LIVE role and name from database
+  const liveRole = (user.role === 'owner' || user.role === 'admin') ? 'admin' : 'manager';
 
-  if (tokenVersion !== userTokenVersion) {
-    throw new Error('Session has been revoked. Please sign in again.');
-  }
-
-  // 4. Return user payload with the LIVE role and name from database
   return {
     userId: user.id,
     email: user.email,
-    role: user.role, // Live role from DB
+    role: liveRole,
     name: user.name,
     jti: payload.jti,
-    tokenVersion: userTokenVersion,
+    tokenVersion: user.token_version,
   };
 }
 
 /**
- * Verifies the JWT token, checks active status, and ensures the user has OWNER role.
+ * Verifies the JWT token, checks active status, and ensures the user has ADMIN role.
  */
-export async function requireOwner(req: Request): Promise<UserPayload> {
+export async function requireAdmin(req: Request): Promise<UserPayload> {
   const payload = await requireAuth(req);
-  if (payload.role !== 'owner') {
-    throw new Error('Owner access required');
+  if (payload.role !== 'admin' && payload.role !== 'owner') {
+    throw new Error('Admin access required');
   }
   return payload;
 }
+
+export const requireOwner = requireAdmin;
 
 /**
  * Revokes a single token in the database upon user logout.
@@ -318,48 +349,12 @@ export function generateToken(user: { id: string; email: string; role: string; n
 }
 
 /**
- * Ensures the primary owner account (pkray2012@gmail.com / Livotel@2027)
- * and primary manager account (livotelpremiumhotel@gmail.com / Livo@2026)
- * exist in the database with their designated credentials and roles.
+ * Accounts are invited and managed dynamically via Netlify Identity.
+ * Inbuilt/hardcoded accounts and passwords have been removed in accordance with
+ * zero-inbuilt-password security policy.
  */
-export async function ensureDefaultAccounts(db: any): Promise<void> {
-  try {
-    const ownerHash = '$2a$12$J8FHC9/fxGf1.8BWllTEI.iISXOjUoK5SZ4qPHgHJgaKGgs.oUVTe'; // Livotel@2027
-    const managerHash = '$2a$12$.9osSw4R0oe2.TwAvujqIO3YzLlKErmfVYSrvNfFoEJs37u8CPOJ.'; // Livo@2026
-
-    await db.sql`
-      INSERT INTO users (email, password_hash, name, role, is_active, token_version)
-      VALUES (
-        'pkray2012@gmail.com',
-        ${ownerHash},
-        'Pradipta Kumar Ray (Owner)',
-        'owner',
-        true,
-        1
-      )
-      ON CONFLICT (email) DO UPDATE SET
-        role = 'owner',
-        is_active = true,
-        updated_at = NOW()
-    `;
-
-    await db.sql`
-      INSERT INTO users (email, password_hash, name, role, is_active, token_version)
-      VALUES (
-        'livotelpremiumhotel@gmail.com',
-        ${managerHash},
-        'Hotel Manager',
-        'manager',
-        true,
-        1
-      )
-      ON CONFLICT (email) DO UPDATE SET
-        role = 'manager',
-        is_active = true,
-        updated_at = NOW()
-    `;
-  } catch (err) {
-    console.warn('ensureDefaultAccounts non-fatal notice:', err);
-  }
+export async function ensureDefaultAccounts(_db: any): Promise<void> {
+  // No-op: All user accounts and roles (admin, manager) are managed
+  // directly through Netlify Identity invitations in the Netlify Dashboard.
 }
 

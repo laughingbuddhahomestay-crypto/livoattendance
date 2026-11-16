@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { api, setToken, clearToken, getToken } from '../api/client';
 import type { User } from '../types';
+import { initNetlifyIdentity, logoutIdentity, openIdentityModal, type NetlifyUser } from './netlifyIdentity';
 
 interface AuthState {
   user: User | null;
@@ -10,7 +11,8 @@ interface AuthState {
 }
 
 interface AuthContextType extends AuthState {
-  login: (email: string, password: string) => Promise<void>;
+  login: (email?: string, password?: string) => Promise<void>;
+  openLoginModal: () => void;
   logout: () => void;
   refreshUser: () => Promise<void>;
 }
@@ -28,16 +30,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const refreshUser = useCallback(async () => {
     const token = getToken();
     if (!token) {
-      // Instantly render UI without blocking on network roundtrip
       setState({ user: null, loading: false, needsSetup: false, error: null });
-      try {
-        const result = await api.checkSetup();
-        if (result.needs_setup) {
-          setState(prev => ({ ...prev, needsSetup: true }));
-        }
-      } catch {
-        // Non-fatal if setup endpoint is unreachable
-      }
       return;
     }
 
@@ -51,39 +44,58 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       });
     } catch {
       clearToken();
-      try {
-        const setupResult = await api.checkSetup();
-        setState({ user: null, loading: false, needsSetup: setupResult.needs_setup, error: null });
-      } catch {
-        setState({ user: null, loading: false, needsSetup: false, error: null });
-      }
+      setState({ user: null, loading: false, needsSetup: false, error: null });
     }
   }, []);
+
+  // Initialize Netlify Identity widget and listen for login/logout/invite events
+  useEffect(() => {
+    initNetlifyIdentity(
+      async (identityUser: NetlifyUser) => {
+        try {
+          const jwtToken = await identityUser.jwt();
+          if (jwtToken) {
+            setToken(jwtToken);
+            await refreshUser();
+          }
+        } catch (err) {
+          console.error('[IDENTITY] Error retrieving token from Netlify Identity:', err);
+        }
+      },
+      () => {
+        clearToken();
+        setState({ user: null, loading: false, needsSetup: false, error: null });
+      }
+    );
+  }, [refreshUser]);
 
   useEffect(() => {
     refreshUser();
   }, [refreshUser]);
 
-  const login = async (email: string, password: string) => {
-    const result = await api.login({ email, password });
-    setToken(result.token);
-    setState({
-      user: result.user as unknown as User,
-      loading: false,
-      needsSetup: false,
-      error: null,
-    });
+  const login = async (email?: string, password?: string) => {
+    if (email && password) {
+      const result = await api.login({ email, password });
+      setToken(result.token);
+      await refreshUser();
+    } else {
+      openIdentityModal('login');
+    }
+  };
+
+  const openLoginModal = () => {
+    openIdentityModal('login');
   };
 
   const logout = () => {
-    // Attempt server-side token revocation
+    logoutIdentity();
     api.logout().catch((err) => console.warn('Server logout error:', err));
     clearToken();
     setState({ user: null, loading: false, needsSetup: false, error: null });
   };
 
   return (
-    <AuthContext.Provider value={{ ...state, login, logout, refreshUser }}>
+    <AuthContext.Provider value={{ ...state, login, openLoginModal, logout, refreshUser }}>
       {children}
     </AuthContext.Provider>
   );

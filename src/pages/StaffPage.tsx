@@ -10,7 +10,7 @@ import ConfirmDialog from '../components/ConfirmDialog';
 export default function StaffPage() {
   const navigate = useNavigate();
   const { user } = useAuth();
-  const isOwner = user?.role === 'owner';
+  const isOwner = user?.role === 'admin' || user?.role === 'owner';
 
   const [staff, setStaff] = useState<Staff[]>([]);
   const [loading, setLoading] = useState(true);

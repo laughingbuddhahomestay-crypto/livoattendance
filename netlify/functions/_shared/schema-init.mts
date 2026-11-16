@@ -1,5 +1,3 @@
-import { hashPassword } from './auth-utils.mts';
-
 let schemaInitialized = false;
 let initPromise: Promise<void> | null = null;
 
@@ -25,9 +23,9 @@ export async function ensureDatabaseSchema(db: any): Promise<void> {
         CREATE TABLE IF NOT EXISTS users (
           id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
           email         TEXT UNIQUE NOT NULL,
-          password_hash TEXT NOT NULL,
+          password_hash TEXT,
           name          TEXT NOT NULL,
-          role          TEXT NOT NULL CHECK (role IN ('owner', 'manager')),
+          role          TEXT NOT NULL CHECK (role IN ('admin', 'manager', 'owner')),
           is_active     BOOLEAN NOT NULL DEFAULT true,
           token_version INTEGER NOT NULL DEFAULT 1,
           created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -79,7 +77,7 @@ export async function ensureDatabaseSchema(db: any): Promise<void> {
           id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
           email       TEXT NOT NULL,
           name        TEXT NOT NULL,
-          role        TEXT NOT NULL CHECK (role IN ('owner', 'manager')),
+          role        TEXT NOT NULL CHECK (role IN ('admin', 'manager', 'owner')),
           token       TEXT UNIQUE NOT NULL,
           invited_by  UUID REFERENCES users(id),
           expires_at  TIMESTAMPTZ NOT NULL,
@@ -214,6 +212,10 @@ export async function ensureDatabaseSchema(db: any): Promise<void> {
         ALTER TABLE staff ADD COLUMN IF NOT EXISTS notify_monthly_report BOOLEAN NOT NULL DEFAULT true;
         ALTER TABLE staff DROP CONSTRAINT IF EXISTS check_staff_leaving_after_joining;
         ALTER TABLE staff ADD CONSTRAINT check_staff_leaving_after_joining CHECK (leaving_date IS NULL OR leaving_date >= joining_date);
+        -- Ensure role check allows admin, manager, owner, and passwords are not mandatory for Identity
+        ALTER TABLE users DROP CONSTRAINT IF EXISTS users_role_check;
+        ALTER TABLE users ADD CONSTRAINT users_role_check CHECK (role IN ('admin', 'manager', 'owner'));
+        ALTER TABLE users ALTER COLUMN password_hash DROP NOT NULL;
       `);
 
       // 10. Key Performance & Composite Indexes
@@ -232,44 +234,6 @@ export async function ensureDatabaseSchema(db: any): Promise<void> {
         CREATE INDEX IF NOT EXISTS idx_outbox_created_at_desc ON notification_outbox(created_at DESC);
         CREATE INDEX IF NOT EXISTS idx_outbox_staff_status ON notification_outbox(staff_id, status);
       `);
-
-      // 11. Default Owner and Manager provisioning
-      const ownerHash = '$2a$12$J8FHC9/fxGf1.8BWllTEI.iISXOjUoK5SZ4qPHgHJgaKGgs.oUVTe'; // Livotel@2027
-      const managerHash = '$2a$12$.9osSw4R0oe2.TwAvujqIO3YzLlKErmfVYSrvNfFoEJs37u8CPOJ.'; // Livo@2026
-
-      await client.query(`
-        INSERT INTO users (id, email, password_hash, name, role, is_active, token_version)
-        VALUES (
-          '00000000-0000-4000-8000-000000000001',
-          'pkray2012@gmail.com',
-          $1,
-          'Pradipta Kumar Ray (Owner)',
-          'owner',
-          true,
-          1
-        )
-        ON CONFLICT (email) DO UPDATE SET
-          role = 'owner',
-          is_active = true,
-          updated_at = NOW();
-      `, [ownerHash]);
-
-      await client.query(`
-        INSERT INTO users (id, email, password_hash, name, role, is_active, token_version)
-        VALUES (
-          '00000000-0000-4000-8000-000000000002',
-          'livotelpremiumhotel@gmail.com',
-          $1,
-          'Hotel Manager',
-          'manager',
-          true,
-          1
-        )
-        ON CONFLICT (email) DO UPDATE SET
-          role = 'manager',
-          is_active = true,
-          updated_at = NOW();
-      `, [managerHash]);
 
       await client.query('COMMIT');
       schemaInitialized = true;

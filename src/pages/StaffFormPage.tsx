@@ -45,7 +45,7 @@ export default function StaffFormPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { user } = useAuth();
-  const isOwner = user?.role === 'owner';
+  const isOwner = user?.role === 'admin' || user?.role === 'owner';
   const isEdit = Boolean(id);
 
   const [form, setForm] = useState<StaffFormData>(emptyForm);

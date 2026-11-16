@@ -21,7 +21,7 @@ export default function Layout() {
     { to: '/settings', label: 'Settings', icon: '⚙️' },
   ];
 
-  if (user?.role === 'owner') {
+  if (user?.role === 'admin' || user?.role === 'owner') {
     navItems.push({ to: '/audit', label: 'Audit Log', icon: '🔍' });
   }
 
@@ -51,8 +51,8 @@ export default function Layout() {
             <>
               <span className="header-user">
                 <span className="header-user-name">{user.name}</span>
-                <span className={`role-badge role-${user.role || 'manager'}`}>
-                  {user.role === 'owner' ? '★ Owner' : 'Manager'}
+                <span className={`role-badge role-${user.role === 'manager' ? 'manager' : 'owner'}`}>
+                  {user.role === 'manager' ? 'Manager' : '★ Admin'}
                 </span>
               </span>
               <button className="btn btn-sm btn-header-logout" onClick={handleLogout}>

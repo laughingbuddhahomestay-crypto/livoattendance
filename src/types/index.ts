@@ -1,6 +1,6 @@
 /* ── Shared Types for Livotel Attendance ── */
 
-export type UserRole = 'owner' | 'manager';
+export type UserRole = 'admin' | 'manager' | 'owner';
 
 export type AttendanceStatus =
   | 'present'

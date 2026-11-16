@@ -8,7 +8,7 @@ import ConfirmDialog from '../components/ConfirmDialog';
 
 export default function SettingsPage() {
   const { user } = useAuth();
-  const isOwner = user?.role === 'owner';
+  const isOwner = user?.role === 'admin' || user?.role === 'owner';
 
   const [activeTab, setActiveTab] = useState<'profile' | 'users' | 'locks' | 'notifications' | 'system'>('profile');
 
@@ -513,8 +513,8 @@ export default function SettingsPage() {
                     value={inviteRole}
                     onChange={e => setInviteRole(e.target.value as UserRole)}
                   >
-                    <option value="manager">Manager (Can mark attendance and view reports)</option>
-                    <option value="owner">Owner / Admin (Full access to settings, staff & locks)</option>
+                    <option value="admin">Admin (Full access to staff, confidential salary, locks & audit)</option>
+                    <option value="manager">Manager (Daily attendance entry, staff roster view & reports)</option>
                   </select>
                 </div>
                 <button type="submit" className="btn btn-primary" disabled={inviteLoading}>

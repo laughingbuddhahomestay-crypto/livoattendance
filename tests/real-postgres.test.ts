@@ -1204,4 +1204,47 @@ describe('Real PostgreSQL Integration & Concurrency Tests (PGlite Engine v16.4)'
       expect(checkRes.rows[0].used_at).not.toBeNull();
     });
   });
+
+  describe('13. Netlify Identity Dynamic User Provisioning & Admin/Manager Roles (Migration 0010)', () => {
+    it('applies migration 0010, converts legacy owner to admin, allows nullable password_hash for Identity users', async () => {
+      // Apply migration 0010
+      const mig10 = fs.readFileSync(
+        path.join(process.cwd(), 'netlify/database/migrations/0010_netlify_identity_and_admin_role/migration.sql'),
+        'utf8'
+      );
+      await db.exec(mig10);
+
+      // Verify that Netlify Identity user can be provisioned with NO password_hash (NULL) and role 'admin'
+      const adminIdentityId = crypto.randomUUID();
+      await db.query(
+        `INSERT INTO users (id, email, password_hash, name, role, is_active)
+         VALUES ($1, 'identity-admin@livotel.com', NULL, 'Admin User', 'admin', true)`,
+        [adminIdentityId]
+      );
+
+      const adminUser = await db.query<any>(
+        `SELECT id, email, password_hash, role, is_active FROM users WHERE id = $1`,
+        [adminIdentityId]
+      );
+      expect(adminUser.rows.length).toBe(1);
+      expect(adminUser.rows[0].role).toBe('admin');
+      expect(adminUser.rows[0].password_hash).toBeNull();
+
+      // Verify that Netlify Identity user can be provisioned with role 'manager'
+      const managerIdentityId = crypto.randomUUID();
+      await db.query(
+        `INSERT INTO users (id, email, password_hash, name, role, is_active)
+         VALUES ($1, 'identity-manager@livotel.com', NULL, 'Hotel Manager', 'manager', true)`,
+        [managerIdentityId]
+      );
+
+      const managerUser = await db.query<any>(
+        `SELECT id, email, password_hash, role, is_active FROM users WHERE id = $1`,
+        [managerIdentityId]
+      );
+      expect(managerUser.rows.length).toBe(1);
+      expect(managerUser.rows[0].role).toBe('manager');
+      expect(managerUser.rows[0].password_hash).toBeNull();
+    });
+  });
 });

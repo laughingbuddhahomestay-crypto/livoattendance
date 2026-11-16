@@ -30,8 +30,8 @@ export default async (req: Request, context: Context) => {
       if (id === user.userId && is_active === false) {
         return errorResponse('You cannot deactivate your own account', 400);
       }
-      if (id === user.userId && role !== undefined && role !== 'owner') {
-        return errorResponse('You cannot change your own role from owner', 400);
+      if (id === user.userId && role !== undefined && role !== 'admin' && role !== 'owner') {
+        return errorResponse('You cannot change your own role from admin', 400);
       }
 
       // Build update fields dynamically
@@ -46,11 +46,11 @@ export default async (req: Request, context: Context) => {
         values.push(name.trim());
       }
       if (role !== undefined) {
-        if (!['owner', 'manager'].includes(role)) {
-          return errorResponse('Role must be either "owner" or "manager"');
+        if (!['admin', 'manager', 'owner'].includes(role)) {
+          return errorResponse('Role must be either "admin" or "manager"');
         }
         updates.push(`role = $${paramIndex++}`);
-        values.push(role);
+        values.push(role === 'owner' ? 'admin' : role);
         shouldBumpToken = true;
       }
       if (is_active !== undefined) {

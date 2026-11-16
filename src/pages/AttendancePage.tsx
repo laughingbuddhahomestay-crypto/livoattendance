@@ -211,7 +211,7 @@ export default function AttendancePage() {
     });
   };
 
-  const isEditable = !monthLocked || user?.role === 'owner';
+  const isEditable = !monthLocked || user?.role === 'admin' || user?.role === 'owner';
 
   const getFieldValue = (staffId: string, field: keyof EditedEntry) => {
     const edited = editedEntries.get(staffId);
@@ -475,9 +475,9 @@ export default function AttendancePage() {
       {monthLocked && (
         <div className="lock-banner">
           🔒 <strong>Month Locked:</strong> This month is locked against further edits.{' '}
-          {user?.role === 'owner'
+          {user?.role === 'admin' || user?.role === 'owner'
             ? 'Unlock it from Settings to make changes.'
-            : 'Contact the owner to unlock it.'}
+            : 'Contact an administrator to unlock it.'}
         </div>
       )}
 
@@ -551,7 +551,7 @@ export default function AttendancePage() {
         >
           Not Marked ({counts.notMarked})
         </button>
-        {user?.role === 'owner' && (
+        {(user?.role === 'admin' || user?.role === 'owner') && (
           <Link
             to={`/audit?date=${date}`}
             className="btn btn-sm btn-ghost"
@@ -788,7 +788,7 @@ export default function AttendancePage() {
                         </span>
                       )}
                     </div>
-                    {user?.role === 'owner' && (
+                    {(user?.role === 'admin' || user?.role === 'owner') && (
                       <Link
                         to={`/audit?staff_id=${staff.id}&date=${date}`}
                         style={{
